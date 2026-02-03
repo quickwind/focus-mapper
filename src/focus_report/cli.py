@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .completer import path_completion
 from .errors import FocusReportError
 from .io import read_table, write_table
 from .mapping.config import load_mapping_config
@@ -95,7 +96,8 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
     mapping_path = getattr(args, "mapping", None)
     while mapping_path is None:
-        val = _prompt("Mapping YAML path: ").strip()
+        with path_completion():
+            val = _prompt("Mapping YAML path: ").strip()
         if val:
             mapping_path = _path(val)
     logger.debug("Loading mapping configuration from: %s", mapping_path)
@@ -103,7 +105,8 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
     input_path = getattr(args, "input", None)
     while input_path is None:
-        val = _prompt("Input file (CSV/Parquet): ").strip()
+        with path_completion():
+            val = _prompt("Input file (CSV/Parquet): ").strip()
         if val:
             input_path = _path(val)
     logger.debug("Reading input dataset: %s", input_path)
@@ -111,7 +114,8 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
     output_path = getattr(args, "output", None)
     while output_path is None:
-        val = _prompt("Output report path [focus.parquet]: ").strip()
+        with path_completion():
+            val = _prompt("Output report path [focus.parquet]: ").strip()
         output_path = _path(val or "focus.parquet")
 
     logger.info("Generating FOCUS dataframe...")
@@ -173,7 +177,8 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
     input_path = getattr(args, "input", None)
     while input_path is None:
-        val = _prompt("Dataset to validate (CSV/Parquet): ").strip()
+        with path_completion():
+            val = _prompt("Dataset to validate (CSV/Parquet): ").strip()
         if val:
             input_path = _path(val)
     logger.debug("Reading dataset for validation: %s", input_path)

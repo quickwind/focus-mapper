@@ -5,6 +5,7 @@ import logging
 import sys
 from pathlib import Path
 
+from .completer import path_completion
 from .io import read_table
 from .mapping.config import MappingConfig
 from .spec import load_focus_spec
@@ -106,7 +107,8 @@ def main(argv: list[str] | None = None) -> int:
 
     input_path = args.input
     while input_path is None:
-        val = prompt("Input file (CSV/Parquet): ").strip()
+        with path_completion():
+            val = prompt("Input file (CSV/Parquet): ").strip()
         if val:
             input_path = _path(val)
 
@@ -118,7 +120,8 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             input_path = None
             while input_path is None:
-                val = prompt("Input file (CSV/Parquet): ").strip()
+                with path_completion():
+                    val = prompt("Input file (CSV/Parquet): ").strip()
                 if val:
                     input_path = _path(val)
             continue
@@ -132,13 +135,15 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             input_path = None
             while input_path is None:
-                val = prompt("Input file (CSV/Parquet): ").strip()
+                with path_completion():
+                    val = prompt("Input file (CSV/Parquet): ").strip()
                 if val:
                     input_path = _path(val)
 
     output_path = args.output
     while output_path is None:
-        val = prompt("Output mapping YAML path [mapping.yaml]: ").strip()
+        with path_completion():
+            val = prompt("Output mapping YAML path [mapping.yaml]: ").strip()
         output_path = _path(val or "mapping.yaml")
 
     include_recommended = args.include_recommended
