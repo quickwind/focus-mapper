@@ -29,25 +29,27 @@ class SidecarMetadata:
 
     def to_dict(self) -> dict:
         return {
-            "focus": {
-                "spec_version": self.spec_version,
-                "spec_source": self.spec_source,
-            },
-            "generated_at": self.generated_at,
-            "data_generator": {
-                "name": self.generator_name,
-                "version": self.generator_version,
-            },
-            "mapping": {"sha256": self.mapping_hash},
-            "mapping_targets": self.mapping_targets,
-            "columns": {
-                "standard": self.standard_columns,
-                "extensions": self.extension_columns,
-                "extension_definitions": self.extension_definitions,
-            },
-            "validation": {"summary": self.validation_summary},
-            "io": {"input": self.input_path, "output": self.output_path},
+            "FocusVersion": self.spec_version,
+            "CreationDate": self.generated_at,
+            "DataGeneratorName": self.generator_name,
+            "DataGeneratorVersion": self.generator_version,
+            "MappingHash": self.mapping_hash,
+            "InputFile": self.input_path,
+            "OutputFile": self.output_path,
+            "ValidationSummary": self.validation_summary,
+            "Columns": self._get_column_metadata(),
         }
+
+    def _get_column_metadata(self) -> list[dict]:
+        cols = []
+        for c in self.standard_columns:
+            cols.append({"ColumnName": c, "IsExtension": False})
+        for c in self.extension_columns:
+            meta = {"ColumnName": c, "IsExtension": True}
+            if c in self.extension_definitions:
+                meta.update(self.extension_definitions[c])
+            cols.append(meta)
+        return cols
 
     def parquet_kv_metadata(self) -> dict[bytes, bytes]:
         # Keep values short; Parquet metadata is key/value bytes.
@@ -62,12 +64,12 @@ class SidecarMetadata:
                 )
 
         return {
-            b"focus.spec_version": self.spec_version.encode("utf-8"),
-            b"focus.generated_at": self.generated_at.encode("utf-8"),
-            b"focus.data_generator": self.generator_name.encode("utf-8"),
-            b"focus.data_generator_version": self.generator_version.encode("utf-8"),
-            b"focus.mapping_sha256": self.mapping_hash.encode("utf-8"),
-            **({b"focus.spec_ref": spec_ref.encode("utf-8")} if spec_ref else {}),
+            b"FocusVersion": self.spec_version.encode("utf-8"),
+            b"CreationDate": self.generated_at.encode("utf-8"),
+            b"DataGeneratorName": self.generator_name.encode("utf-8"),
+            b"DataGeneratorVersion": self.generator_version.encode("utf-8"),
+            b"MappingHash": self.mapping_hash.encode("utf-8"),
+            **({b"FocusSpecRef": spec_ref.encode("utf-8")} if spec_ref else {}),
         }
 
 
