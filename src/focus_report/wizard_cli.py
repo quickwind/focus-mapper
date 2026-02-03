@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from .io import read_table
@@ -11,6 +12,10 @@ from .wizard import run_wizard
 
 def _path(p: str) -> Path:
     return Path(p).expanduser()
+
+
+def _eprint(message: str) -> None:
+    print(message, file=sys.stderr)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -66,8 +71,17 @@ def main(argv: list[str] | None = None) -> int:
     def prompt(text: str) -> str:
         return input(text)
 
-    spec_version = args.spec or prompt("FOCUS spec version [v1.2]: ").strip() or "v1.2"
-    spec = load_focus_spec(spec_version)
+    while True:
+        spec_version = (
+            args.spec or prompt("FOCUS spec version [v1.2]: ").strip() or "v1.2"
+        )
+        try:
+            spec = load_focus_spec(spec_version)
+            break
+        except Exception as e:
+            _eprint(f"Error: {e}")
+            if args.spec:
+                return 2
 
     input_path = args.input
     while input_path is None:
@@ -75,7 +89,30 @@ def main(argv: list[str] | None = None) -> int:
         if val:
             input_path = _path(val)
 
-    df = read_table(input_path)
+    df = None
+    while df is None:
+        if not input_path.exists():
+            _eprint(f"Error: input file not found: {input_path}")
+            if args.input:
+                return 2
+            input_path = None
+            while input_path is None:
+                val = prompt("Input file (CSV/Parquet): ").strip()
+                if val:
+                    input_path = _path(val)
+            continue
+
+        try:
+            df = read_table(input_path)
+        except Exception as e:
+            _eprint(f"Error: failed to read input file: {e}")
+            if args.input:
+                return 2
+            input_path = None
+            while input_path is None:
+                val = prompt("Input file (CSV/Parquet): ").strip()
+                if val:
+                    input_path = _path(val)
 
     output_path = args.output
     while output_path is None:
@@ -100,10 +137,14 @@ def main(argv: list[str] | None = None) -> int:
         include_recommended=include_recommended,
     )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    _write_mapping(output_path, result.mapping)
-    print(f"Wrote mapping to {output_path}")
-    return 0
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_mapping(output_path, result.mapping)
+        print(f"Wrote mapping to {output_path}")
+        return 0
+    except Exception as e:
+        _eprint(f"Error: failed to write mapping file: {e}")
+        return 2
 
 
 if __name__ == "__main__":

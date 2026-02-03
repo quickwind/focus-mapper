@@ -98,7 +98,7 @@ def test_cli_generate_parquet_embeds_metadata(tmp_path: Path) -> None:
 
     t = pq.read_table(out_parquet)
     md = t.schema.metadata or {}
-    assert b"focus.spec_version" in md
+    assert b"FocusVersion" in md
 
 
 def test_wizard_cli_prompts_for_missing_args(tmp_path: Path, monkeypatch) -> None:
