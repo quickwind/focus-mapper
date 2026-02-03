@@ -46,6 +46,7 @@ def test_cli_validate_exit_code_on_errors(tmp_path: Path) -> None:
     env["PYTHONPATH"] = str(Path("src")) + (
         os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
     )
+
     cmd = [
         sys.executable,
         "-m",
@@ -133,3 +134,57 @@ def test_wizard_cli_prompts_for_missing_args(tmp_path: Path, monkeypatch) -> Non
     rc = main([])
     assert rc == 0
     assert out.exists()
+
+
+def test_cli_generate_interactive(tmp_path: Path, monkeypatch) -> None:
+    out_csv = tmp_path / "focus_interactive.csv"
+
+    inputs = iter(
+        [
+            "1",
+            "v1.2",
+            "tests/fixtures/mapping_basic.yaml",
+            "tests/fixtures/telemetry_small.csv",
+            str(out_csv),
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    from focus_report.cli import main
+
+    rc = main([])
+    assert rc == 0
+    assert out_csv.exists()
+
+
+def test_cli_validate_interactive(tmp_path: Path, monkeypatch) -> None:
+    out_csv = tmp_path / "valid_focus.csv"
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path("src")) + (
+        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+    )
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "focus_report",
+        "generate",
+        "--spec",
+        "v1.2",
+        "--input",
+        "tests/fixtures/telemetry_small.csv",
+        "--mapping",
+        "tests/fixtures/mapping_basic.yaml",
+        "--output",
+        str(out_csv),
+    ]
+    subprocess.run(cmd, check=True, env=env)
+
+    inputs = iter(["2", "v1.2", str(out_csv)])
+    monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+    from focus_report.cli import main
+
+    rc = main([])
+    assert rc == 0
