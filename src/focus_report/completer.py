@@ -20,35 +20,40 @@ class PathCompleter:
                 else text
             )
 
+            # We need to know the full path prefix leading up to the current token 'text'.
+            # Since '/' is a delimiter, 'text' is just the last part of the path.
+            # We find the start of the path by looking for the last delimiter that is NOT a slash.
             path_delims = " \t\n\"\\'`@$><=;|&{("
             path_start = 0
+            # Cursor position in the current word
             for i in range(len(line) - 1, -1, -1):
                 if line[i] in path_delims:
                     path_start = i + 1
                     break
+
+            # The full path including what's before the last slash
+            # and the current 'text' being completed.
             full_path_prefix = line[path_start:]
 
             expanded = os.path.expanduser(full_path_prefix)
 
-            if not full_path_prefix:
-                pattern = "*"
-            else:
-                pattern = expanded + "*"
+            # Construct glob pattern.
+            # If text is empty (e.g. user just typed '/'), we want to list contents.
+            pattern = expanded + "*"
 
             try:
                 matches = glob.glob(pattern)
-
-                processed = []
+                results = []
                 for m in matches:
-                    if os.path.isdir(m) and not m.endswith(os.sep):
-                        m += os.sep
+                    # Since slashes are delimiters, readline expects us to return
+                    # ONLY the part that completes the current token 'text'.
+                    # This ensures the completion list (hints) only shows basenames.
+                    name = os.path.basename(m.rstrip(os.sep))
+                    if os.path.isdir(m):
+                        name += os.sep
+                    results.append(name)
 
-                    processed.append(
-                        os.path.basename(m.rstrip(os.sep))
-                        + (os.sep if os.path.isdir(m) else "")
-                    )
-
-                self.matches = sorted(list(set(processed)))
+                self.matches = sorted(list(set(results)))
             except Exception:
                 self.matches = []
 
@@ -70,16 +75,16 @@ def path_completion() -> Generator[None, None, None]:
 
     try:
         readline.set_completer(PathCompleter())
-        # Standard bash-like bindings
+
         doc = getattr(readline, "__doc__", "")
         if doc and "libedit" in doc:
             readline.parse_and_bind("bind ^I rl_complete")
         else:
             readline.parse_and_bind("tab: complete")
 
-        # Restore default delimiters (includes /) so readline only asks us
-        # to complete the part after the last slash.
-        readline.set_completer_delims(" \t\n\"\\'`@$><=;|&{(")
+        # Crucial: include '/' in delimiters so readline treats path segments as tokens.
+        # This makes the completion UI show only the last segment (the hint).
+        readline.set_completer_delims(" \t\n\"\\'`@$><=;|&{(/")
         yield
     finally:
         readline.set_completer(old_completer)
