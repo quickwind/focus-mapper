@@ -1,0 +1,157 @@
+spec_version: "1.2"
+
+mappings:
+  # Mandatory columns (v1.2)
+  ProviderName:
+    steps:
+      - op: const
+        value: "AcmeDC"
+
+  BillingAccountId:
+    steps:
+      - op: const
+        value: "acct-001"
+
+  BillingAccountName:
+    steps:
+      - op: const
+        value: "Acme Billing"
+
+  BillingAccountType:
+    steps:
+      - op: const
+        value: "Enterprise"
+
+  BillingCurrency:
+    steps:
+      - op: from_column
+        column: billing_currency
+      - op: cast
+        to: string
+
+  BillingPeriodStart:
+    steps:
+      - op: from_column
+        column: billing_period_start
+      - op: cast
+        to: datetime
+
+  BillingPeriodEnd:
+    steps:
+      - op: from_column
+        column: billing_period_end
+      - op: cast
+        to: datetime
+
+  ChargePeriodStart:
+    steps:
+      - op: from_column
+        column: charge_period_start
+      - op: cast
+        to: datetime
+
+  ChargePeriodEnd:
+    steps:
+      - op: from_column
+        column: charge_period_end
+      - op: cast
+        to: datetime
+
+  ChargeCategory:
+    steps:
+      - op: from_column
+        column: charge_category
+
+  ChargeClass:
+    steps:
+      - op: const
+        value: null
+
+  ChargeFrequency:
+    steps:
+      - op: const
+        value: "Usage-Based"
+
+  ChargeDescription:
+    steps:
+      - op: from_column
+        column: charge_description
+
+  InvoiceIssuerName:
+    steps:
+      - op: const
+        value: "AcmeDC"
+
+  PublisherName:
+    steps:
+      - op: const
+        value: "Acme"
+
+  ServiceCategory:
+    steps:
+      - op: const
+        value: "Compute"
+
+  ServiceSubcategory:
+    steps:
+      - op: const
+        value: "Virtual Machines"
+
+  ServiceName:
+    steps:
+      - op: const
+        value: "VirtualMachine"
+
+  PricingQuantity:
+    steps:
+      - op: from_column
+        column: pricing_quantity
+      - op: cast
+        to: decimal
+        scale: 0
+
+  PricingUnit:
+    steps:
+      - op: from_column
+        column: pricing_unit
+      - op: cast
+        to: string
+
+  BilledCost:
+    steps:
+      - op: from_column
+        column: billed_cost
+      - op: cast
+        to: decimal
+        scale: 2
+
+  EffectiveCost:
+    steps:
+      - op: from_column
+        column: billed_cost
+      - op: cast
+        to: decimal
+        scale: 2
+
+  ContractedCost:
+    steps:
+      - op: from_column
+        column: billed_cost
+      - op: cast
+        to: decimal
+        scale: 2
+
+  ListCost:
+    steps:
+      - op: from_column
+        column: billed_cost
+      - op: cast
+        to: decimal
+        scale: 2
+
+  # Example extension
+  x_CostCenter:
+    description: "Internal cost center code"
+    steps:
+      - op: const
+        value: "CC-123"

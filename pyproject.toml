@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "focus-report"
+version = "0.1.0"
+description = "FOCUS v1.2 report generator (YAML mapping + validator)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pandas>=2.0",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+parquet = [
+  "pyarrow>=14.0",
+]
+dev = [
+  "pytest>=8.0",
+  "pyarrow>=14.0",
+]
+
+[project.scripts]
+focus-report = "focus_report.cli:main"
+focus-report-wizard = "focus_report.wizard_cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
