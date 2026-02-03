@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -13,6 +14,8 @@ from .mapping.executor import generate_focus_dataframe
 from .metadata import build_sidecar_metadata, write_sidecar_metadata
 from .spec import load_focus_spec
 from .validate import validate_focus_dataframe, write_validation_report
+
+logger = logging.getLogger("focus_report")
 
 
 def _path(p: str) -> Path:
@@ -27,9 +30,24 @@ def _prompt(text: str) -> str:
     return input(text)
 
 
+def _setup_logging(level_name: str) -> None:
+    level = getattr(logging, level_name.upper(), logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="focus_report")
     p.add_argument("--version", action="version", version=f"focus-report {__version__}")
+    p.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)",
+    )
 
     sub = p.add_subparsers(dest="cmd")
 
@@ -72,6 +90,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         or _prompt("FOCUS spec version [v1.2]: ").strip()
         or "v1.2"
     )
+    logger.debug("Loading FOCUS spec version: %s", spec_version)
     spec = load_focus_spec(spec_version)
 
     mapping_path = getattr(args, "mapping", None)
@@ -79,6 +98,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         val = _prompt("Mapping YAML path: ").strip()
         if val:
             mapping_path = _path(val)
+    logger.debug("Loading mapping configuration from: %s", mapping_path)
     mapping = load_mapping_config(mapping_path)
 
     input_path = getattr(args, "input", None)
@@ -86,6 +106,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         val = _prompt("Input file (CSV/Parquet): ").strip()
         if val:
             input_path = _path(val)
+    logger.debug("Reading input dataset: %s", input_path)
     in_df = read_table(input_path)
 
     output_path = getattr(args, "output", None)
@@ -93,9 +114,17 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         val = _prompt("Output report path [focus.parquet]: ").strip()
         output_path = _path(val or "focus.parquet")
 
+    logger.info("Generating FOCUS dataframe...")
     out_df = generate_focus_dataframe(in_df, mapping=mapping, spec=spec)
+    logger.info("Generation complete. Rows: %d", len(out_df))
 
+    logger.info("Running compliance validation...")
     validation = validate_focus_dataframe(out_df, spec=spec)
+    logger.info(
+        "Validation finished with %d errors and %d warnings",
+        validation.summary.errors,
+        validation.summary.warnings,
+    )
 
     sidecar = build_sidecar_metadata(
         spec=spec,
@@ -116,13 +145,21 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         output_path.name + ".validation.json"
     )
 
-    # Always write dataset.
+    logger.info("Writing output dataset to: %s", output_path)
     write_table(out_df, output_path, parquet_metadata=sidecar.parquet_kv_metadata())
 
+    logger.info("Writing sidecar metadata to: %s", metadata_out)
     write_sidecar_metadata(sidecar, metadata_out)
+
+    logger.info("Writing validation report to: %s", validation_out)
     write_validation_report(validation, validation_out)
 
-    return 2 if validation.summary.errors else 0
+    if validation.summary.errors:
+        logger.error("Dataset generated but failed FOCUS compliance validation.")
+        return 2
+
+    logger.info("Successfully generated FOCUS compliant report.")
+    return 0
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
@@ -131,6 +168,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
         or _prompt("FOCUS spec version [v1.2]: ").strip()
         or "v1.2"
     )
+    logger.debug("Loading FOCUS spec version: %s", spec_version)
     spec = load_focus_spec(spec_version)
 
     input_path = getattr(args, "input", None)
@@ -138,12 +176,20 @@ def _cmd_validate(args: argparse.Namespace) -> int:
         val = _prompt("Dataset to validate (CSV/Parquet): ").strip()
         if val:
             input_path = _path(val)
+    logger.debug("Reading dataset for validation: %s", input_path)
     df = read_table(input_path)
 
+    logger.info("Validating FOCUS dataframe...")
     report = validate_focus_dataframe(df, spec=spec)
+    logger.info(
+        "Validation finished with %d errors and %d warnings",
+        report.summary.errors,
+        report.summary.warnings,
+    )
 
     out_path = getattr(args, "out", None)
     if out_path:
+        logger.info("Writing validation report to: %s", out_path)
         write_validation_report(report, out_path)
     else:
         json.dump(
@@ -153,12 +199,19 @@ def _cmd_validate(args: argparse.Namespace) -> int:
             sort_keys=True,
         )
 
-    return 2 if report.summary.errors else 0
+    if report.summary.errors:
+        logger.error("Validation failed: dataset is not FOCUS compliant.")
+        return 2
+
+    logger.info("Validation successful: dataset is FOCUS compliant.")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    _setup_logging(args.log_level)
 
     if args.cmd is None:
         while True:
@@ -182,10 +235,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "validate":
             return _cmd_validate(args)
     except FocusReportError as e:
-        _eprint(f"Error: {e}")
+        logger.error("%s", e)
         return 1
     except Exception as e:
-        _eprint(f"Unexpected error: {e}")
+        logger.exception("Unexpected error occurred")
         return 1
 
     return 0

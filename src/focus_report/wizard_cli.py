@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -8,6 +9,8 @@ from .io import read_table
 from .mapping.config import MappingConfig
 from .spec import load_focus_spec
 from .wizard import run_wizard
+
+logger = logging.getLogger("focus_report.wizard")
 
 
 def _path(p: str) -> Path:
@@ -18,8 +21,23 @@ def _eprint(message: str) -> None:
     print(message, file=sys.stderr)
 
 
+def _setup_logging(level_name: str) -> None:
+    level = getattr(logging, level_name.upper(), logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="focus_report_wizard")
+    p.add_argument(
+        "--log-level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)",
+    )
     p.add_argument("--spec", help="FOCUS spec version (default: v1.2)")
     p.add_argument("--input", type=_path, help="Input CSV or Parquet")
     p.add_argument("--output", type=_path, help="Output mapping YAML path")
@@ -68,6 +86,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    _setup_logging(args.log_level)
+
     def prompt(text: str) -> str:
         return input(text)
 
@@ -76,6 +96,7 @@ def main(argv: list[str] | None = None) -> int:
             args.spec or prompt("FOCUS spec version [v1.2]: ").strip() or "v1.2"
         )
         try:
+            logger.debug("Loading FOCUS spec version: %s", spec_version)
             spec = load_focus_spec(spec_version)
             break
         except Exception as e:
@@ -103,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         try:
+            logger.debug("Reading input dataset: %s", input_path)
             df = read_table(input_path)
         except Exception as e:
             _eprint(f"Error: failed to read input file: {e}")
@@ -129,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         answer = prompt("Include Optional columns? [y/N] ").strip().lower()
         include_optional = answer in {"y", "yes"}
 
+    logger.info("Starting interactive wizard...")
     result = run_wizard(
         spec=spec,
         input_df=df,
@@ -139,11 +162,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        logger.info("Writing mapping configuration to: %s", output_path)
         _write_mapping(output_path, result.mapping)
         print(f"Wrote mapping to {output_path}")
         return 0
     except Exception as e:
-        _eprint(f"Error: failed to write mapping file: {e}")
+        logger.exception("Failed to write mapping file")
         return 2
 
 
