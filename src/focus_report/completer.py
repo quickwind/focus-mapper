@@ -14,37 +14,41 @@ except ImportError:
 class PathCompleter:
     def __call__(self, text: str, state: int) -> str | None:
         if state == 0:
-            # Expand ~ and handle empty text
-            expanded = os.path.expanduser(text)
+            line = (
+                readline.get_line_buffer()
+                if (readline and hasattr(readline, "get_line_buffer"))
+                else text
+            )
 
-            # Construct glob pattern
-            if not text:
+            path_delims = " \t\n\"\\'`@$><=;|&{("
+            path_start = 0
+            for i in range(len(line) - 1, -1, -1):
+                if line[i] in path_delims:
+                    path_start = i + 1
+                    break
+            full_path_prefix = line[path_start:]
+
+            expanded = os.path.expanduser(full_path_prefix)
+
+            if not full_path_prefix:
                 pattern = "*"
             else:
                 pattern = expanded + "*"
 
             try:
                 matches = glob.glob(pattern)
-                # Filter out anything that doesn't start with the expanded text
-                # (glob usually handles this but expanduser can be tricky)
 
                 processed = []
                 for m in matches:
-                    # Add trailing slash for directories
                     if os.path.isdir(m) and not m.endswith(os.sep):
                         m += os.sep
 
-                    # If the user started with ~, we should return matches starting with ~
-                    if text.startswith("~"):
-                        # This is a bit complex to reverse expanduser perfectly,
-                        # but we can try a simple replacement if it fits.
-                        home = os.path.expanduser("~")
-                        if m.startswith(home):
-                            m = "~" + m[len(home) :]
+                    processed.append(
+                        os.path.basename(m.rstrip(os.sep))
+                        + (os.sep if os.path.isdir(m) else "")
+                    )
 
-                    processed.append(m)
-
-                self.matches = sorted(processed)
+                self.matches = sorted(list(set(processed)))
             except Exception:
                 self.matches = []
 
@@ -67,13 +71,15 @@ def path_completion() -> Generator[None, None, None]:
     try:
         readline.set_completer(PathCompleter())
         # Standard bash-like bindings
-        if "libedit" in readline.__doc__:  # type: ignore
+        doc = getattr(readline, "__doc__", "")
+        if doc and "libedit" in doc:
             readline.parse_and_bind("bind ^I rl_complete")
         else:
             readline.parse_and_bind("tab: complete")
 
-        # Don't break paths on slashes or dots
-        readline.set_completer_delims(" \t\n;")
+        # Restore default delimiters (includes /) so readline only asks us
+        # to complete the part after the last slash.
+        readline.set_completer_delims(" \t\n\"\\'`@$><=;|&{(")
         yield
     finally:
         readline.set_completer(old_completer)
