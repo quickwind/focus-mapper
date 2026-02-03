@@ -54,7 +54,9 @@ def coerce_dataframe_to_spec(df: pd.DataFrame, *, spec: FocusSpec) -> pd.DataFra
     for col in spec.columns:
         if col.name not in out.columns:
             continue
-        out[col.name] = coerce_series_to_type(out[col.name], col)
+        series = out[col.name]
+        if isinstance(series, pd.Series):
+            out.loc[:, col.name] = coerce_series_to_type(series, col)
     return out
 
 
