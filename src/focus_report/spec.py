@@ -14,6 +14,8 @@ from .errors import SpecError
 
 @dataclass(frozen=True)
 class FocusColumnSpec:
+    """Represents the schema and constraints for a single FOCUS column."""
+
     name: str
     feature_level: str
     allows_nulls: bool
@@ -25,20 +27,25 @@ class FocusColumnSpec:
 
     @property
     def is_extension(self) -> bool:
+        """Returns True if this is a custom extension column (starts with x_)."""
         return self.name.startswith("x_")
 
 
 @dataclass(frozen=True)
 class FocusSpec:
+    """Represents a full FOCUS specification version (e.g., v1.2)."""
+
     version: str
     source: dict[str, Any] | None
     columns: list[FocusColumnSpec]
 
     @property
     def column_names(self) -> list[str]:
+        """Returns a list of all standard column names in this spec."""
         return [c.name for c in self.columns]
 
     def get_column(self, name: str) -> FocusColumnSpec | None:
+        """Retrieves a column specification by name."""
         for c in self.columns:
             if c.name == name:
                 return c
@@ -46,10 +53,12 @@ class FocusSpec:
 
     @property
     def mandatory_columns(self) -> list[FocusColumnSpec]:
+        """Returns only the columns marked as 'Mandatory' in the spec."""
         return [c for c in self.columns if c.feature_level.lower() == "mandatory"]
 
 
 def coerce_dataframe_to_spec(df: pd.DataFrame, *, spec: FocusSpec) -> pd.DataFrame:
+    """Casts all standard columns in a DataFrame to the types defined in the FOCUS spec."""
     out = df.copy()
     for col in spec.columns:
         if col.name not in out.columns:
@@ -61,6 +70,7 @@ def coerce_dataframe_to_spec(df: pd.DataFrame, *, spec: FocusSpec) -> pd.DataFra
 
 
 def coerce_series_to_type(series: pd.Series, col: FocusColumnSpec) -> pd.Series:
+    """Converts a pandas Series to the data type specified in the FOCUS column definition."""
     t = col.data_type.strip().lower()
     if t == "string":
         return series.astype("string")
@@ -74,6 +84,8 @@ def coerce_series_to_type(series: pd.Series, col: FocusColumnSpec) -> pd.Series:
 
 
 def _coerce_decimal(series: pd.Series) -> pd.Series:
+    """Safely converts a series to Decimal objects, handling nulls and numeric strings."""
+
     def conv(v: Any) -> Any:
         if v is None or v is pd.NA or (isinstance(v, float) and pd.isna(v)):
             return None
@@ -88,6 +100,8 @@ def _coerce_decimal(series: pd.Series) -> pd.Series:
 
 
 def _coerce_json(series: pd.Series) -> pd.Series:
+    """Parses JSON strings into dictionaries, or preserves existing dicts."""
+
     def conv(v: Any) -> Any:
         if v is None or v is pd.NA or (isinstance(v, float) and pd.isna(v)):
             return None
@@ -108,6 +122,7 @@ def _coerce_json(series: pd.Series) -> pd.Series:
 
 
 def load_focus_spec(version: str) -> FocusSpec:
+    """Loads a FOCUS specification from a versioned JSON artifact."""
     normalized = version.lower().removeprefix("v")
     if normalized != "1.2":
         raise SpecError(f"Unsupported spec version: {version}")

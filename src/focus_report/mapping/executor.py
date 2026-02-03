@@ -11,6 +11,16 @@ from .ops import apply_steps
 def generate_focus_dataframe(
     df: pd.DataFrame, *, mapping: MappingConfig, spec: FocusSpec
 ) -> pd.DataFrame:
+    """
+    Orchestrates the conversion of an input DataFrame to a FOCUS-compliant DataFrame.
+
+    This function:
+    1. Validates that the mapping config version matches the spec version.
+    2. Initializes a new DataFrame with standard FOCUS columns in canonical order.
+    3. Populates columns using the rules defined in the mapping configuration.
+    4. Appends custom extension columns (x_ prefix).
+    5. Coerces all columns to the data types required by the FOCUS specification.
+    """
     if mapping.spec_version.lower().removeprefix(
         "v"
     ) != spec.version.lower().removeprefix("v"):

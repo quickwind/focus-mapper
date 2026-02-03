@@ -12,6 +12,12 @@ from ..errors import MappingExecutionError
 def apply_steps(
     df: pd.DataFrame, *, steps: list[dict[str, Any]], target: str
 ) -> pd.Series:
+    """
+    Executes a sequence of mapping operations on a DataFrame to produce a single Series.
+
+    Each step in 'steps' is an operation (e.g., 'from_column', 'math', 'cast') that
+    either initializes or transforms the current working series.
+    """
     series: pd.Series | None = None
 
     for step in steps:
@@ -20,6 +26,7 @@ def apply_steps(
             raise MappingExecutionError(f"Invalid op for target {target}")
 
         if op == "from_column":
+            # Initialize series from a raw input column
             col = step.get("column")
             if not isinstance(col, str) or not col:
                 raise MappingExecutionError(
@@ -32,11 +39,13 @@ def apply_steps(
             continue
 
         if op == "const":
+            # Initialize series with a static value
             value = step.get("value")
             series = pd.Series([value] * len(df))
             continue
 
         if op == "coalesce":
+            # Take the first non-null value from a list of input columns
             cols = step.get("columns")
             if not isinstance(cols, list) or not cols:
                 raise MappingExecutionError(
@@ -56,6 +65,7 @@ def apply_steps(
             continue
 
         if op == "map_values":
+            # Transform values using a lookup dictionary
             if series is None:
                 src = step.get("column")
                 if not isinstance(src, str) or not src:
@@ -76,6 +86,7 @@ def apply_steps(
             continue
 
         if op == "concat":
+            # Join multiple columns into a single string column
             cols = step.get("columns")
             sep = step.get("sep", "")
             if not isinstance(cols, list) or not cols:
@@ -101,6 +112,7 @@ def apply_steps(
             continue
 
         if op == "cast":
+            # Convert the working series to a specific data type
             if series is None:
                 raise MappingExecutionError(
                     f"cast requires a prior series for target {target}"
@@ -132,6 +144,7 @@ def apply_steps(
             )
 
         if op == "round":
+            # Round numeric values in the series
             if series is None:
                 raise MappingExecutionError(
                     f"round requires a prior series for target {target}"
@@ -145,6 +158,7 @@ def apply_steps(
             continue
 
         if op == "math":
+            # Perform row-wise arithmetic calculations
             operator = step.get("operator")
             operands = step.get("operands")
             if not isinstance(operator, str) or operator not in {
@@ -213,7 +227,7 @@ def apply_steps(
                 continue
 
         if op == "when":
-            # Minimal conditional: when column equals value, then then_value, else else_value.
+            # Basic conditional assignment
             col = step.get("column")
             value = step.get("value")
             then_value = step.get("then")
@@ -236,6 +250,8 @@ def apply_steps(
 
 
 def _cast_decimal(series: pd.Series, *, scale: int | None) -> pd.Series:
+    """Safely converts a series to Decimal objects with optional scaling."""
+
     def conv(v: Any) -> Any:
         if v is None or (isinstance(v, float) and pd.isna(v)) or v is pd.NA:
             return None

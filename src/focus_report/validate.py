@@ -55,6 +55,17 @@ class ValidationReport:
 
 
 def validate_focus_dataframe(df: pd.DataFrame, *, spec: FocusSpec) -> ValidationReport:
+    """
+    Validates a DataFrame against the FinOps FOCUS specification rules.
+
+    Checks performed:
+    1. Presence: Mandatory columns must exist (ERROR), Conditional columns (WARN).
+    2. Nullability: Mandatory columns must not contain nulls.
+    3. Enumerations: Columns with 'allowed_values' are checked for compliance.
+    4. Type Integrity: Values must be parseable as Date/Time, Decimal, or JSON.
+    5. Extensions: Custom columns must use the 'x_' prefix.
+    6. Formats: Basic checks for standard formats (e.g., ISO 4217 currency codes).
+    """
     findings: list[ValidationFinding] = []
 
     # 1) Presence by feature level
@@ -87,7 +98,9 @@ def validate_focus_dataframe(df: pd.DataFrame, *, spec: FocusSpec) -> Validation
             continue
 
         s = df[col.name]
-        failing = int(pd.isna(s).sum())
+        if not isinstance(s, pd.Series):
+            continue
+        failing = int(s.isna().sum())
         if failing:
             findings.append(
                 ValidationFinding(
@@ -107,7 +120,9 @@ def validate_focus_dataframe(df: pd.DataFrame, *, spec: FocusSpec) -> Validation
         if col.name not in df.columns:
             continue
         s = df[col.name]
-        mask = (~pd.isna(s)) & (~s.astype("string").isin(col.allowed_values))
+        if not isinstance(s, pd.Series):
+            continue
+        mask = (~s.isna()) & (~s.astype("string").isin(col.allowed_values))
         failing = int(mask.sum())
         if failing:
             findings.append(
@@ -126,6 +141,8 @@ def validate_focus_dataframe(df: pd.DataFrame, *, spec: FocusSpec) -> Validation
         if col.name not in df.columns:
             continue
         s = df[col.name]
+        if not isinstance(s, pd.Series):
+            continue
         dtype = col.data_type.strip().lower()
         if dtype == "date/time":
             _validate_datetime(findings, s, col.name)
@@ -136,6 +153,8 @@ def validate_focus_dataframe(df: pd.DataFrame, *, spec: FocusSpec) -> Validation
 
     # 5) Extension columns: must start with x_
     for name in df.columns:
+        if not isinstance(name, str):
+            continue
         if name.startswith("x_"):
             continue
         if name in spec.column_names:
@@ -152,20 +171,22 @@ def validate_focus_dataframe(df: pd.DataFrame, *, spec: FocusSpec) -> Validation
 
     # 6) Basic currency code format check (ISO4217-like)
     if "BillingCurrency" in df.columns:
-        s = df["BillingCurrency"].astype("string")
-        mask = (~pd.isna(s)) & (~s.str.fullmatch(r"[A-Z]{3}"))
-        failing = int(mask.sum())
-        if failing:
-            findings.append(
-                ValidationFinding(
-                    check_id="focus.currency_format",
-                    severity="ERROR",
-                    message="BillingCurrency must be a 3-letter uppercase ISO 4217 code",
-                    column="BillingCurrency",
-                    failing_rows=failing,
-                    sample_values=_sample_values(s[mask]),
+        s = df["BillingCurrency"]
+        if isinstance(s, pd.Series):
+            s_str = s.astype("string")
+            mask = (~s_str.isna()) & (~s_str.str.fullmatch(r"[A-Z]{3}"))
+            failing = int(mask.sum())
+            if failing:
+                findings.append(
+                    ValidationFinding(
+                        check_id="focus.currency_format",
+                        severity="ERROR",
+                        message="BillingCurrency must be a 3-letter uppercase ISO 4217 code",
+                        column="BillingCurrency",
+                        failing_rows=failing,
+                        sample_values=_sample_values(s[mask]),
+                    )
                 )
-            )
 
     errors = sum(1 for f in findings if f.severity == "ERROR")
     warnings = sum(1 for f in findings if f.severity == "WARN")
@@ -177,12 +198,14 @@ def validate_focus_dataframe(df: pd.DataFrame, *, spec: FocusSpec) -> Validation
 
 
 def write_validation_report(report: ValidationReport, path: Path) -> None:
+    """Writes the validation result to a JSON file."""
     path.write_text(
         json.dumps(report.to_dict(), indent=2, sort_keys=True), encoding="utf-8"
     )
 
 
 def _sample_values(s: pd.Series, limit: int = 5) -> list[str]:
+    """Extracts a few sample failing values for the validation report."""
     vals = []
     for v in s.dropna().astype(str).head(limit).tolist():
         vals.append(v)
@@ -192,10 +215,11 @@ def _sample_values(s: pd.Series, limit: int = 5) -> list[str]:
 def _validate_datetime(
     findings: list[ValidationFinding], s: pd.Series, col: str
 ) -> None:
+    """Checks if a column contains valid ISO8601/parseable dates."""
     if pd.api.types.is_datetime64_any_dtype(s.dtype):
         return
     parsed = pd.to_datetime(s, utc=True, errors="coerce")
-    mask = (~pd.isna(s)) & (pd.isna(parsed))
+    mask = (~s.isna()) & (pd.isna(parsed))
     failing = int(mask.sum())
     if failing:
         findings.append(
@@ -213,6 +237,8 @@ def _validate_datetime(
 def _validate_decimal(
     findings: list[ValidationFinding], s: pd.Series, col: str
 ) -> None:
+    """Checks if a column contains valid decimal-compatible values."""
+
     def ok(v: Any) -> bool:
         if v is None or v is pd.NA or (isinstance(v, float) and pd.isna(v)):
             return True
@@ -242,6 +268,8 @@ def _validate_decimal(
 def _validate_json_object(
     findings: list[ValidationFinding], s: pd.Series, col: str
 ) -> None:
+    """Checks if a column contains valid JSON object strings or dictionaries."""
+
     def ok(v: Any) -> bool:
         if v is None or v is pd.NA or (isinstance(v, float) and pd.isna(v)):
             return True

@@ -12,6 +12,16 @@ except ImportError:
 
 
 class PathCompleter:
+    """
+    Implements a custom readline completer for file paths.
+
+    It handles:
+    1. Identifying the full path context from the current line buffer.
+    2. Expanding user home directories (~).
+    3. Globbing the filesystem for matches.
+    4. Returning ONLY the portion (basename) that completes the current token.
+    """
+
     def __call__(self, text: str, state: int) -> str | None:
         if state == 0:
             line = (
