@@ -65,22 +65,27 @@ def coerce_dataframe_to_spec(df: pd.DataFrame, *, spec: FocusSpec) -> pd.DataFra
             continue
         series = out[col.name]
         if isinstance(series, pd.Series):
-            out.loc[:, col.name] = coerce_series_to_type(series, col)
+            out[col.name] = coerce_series_to_type(series, col)
     return out
 
 
 def coerce_series_to_type(series: pd.Series, col: FocusColumnSpec) -> pd.Series:
     """Converts a pandas Series to the data type specified in the FOCUS column definition."""
-    t = col.data_type.strip().lower()
-    if t == "string":
-        return series.astype("string")
-    if t == "date/time":
-        return pd.to_datetime(series, utc=True, errors="coerce")
-    if t == "decimal":
-        return _coerce_decimal(series)
-    if t == "json":
-        return _coerce_json(series)
-    raise SpecError(f"Unsupported data type in spec: {col.data_type}")
+    try:
+        t = col.data_type.strip().lower()
+        if t == "string":
+            return series.astype("string")
+        if t == "date/time":
+            return pd.to_datetime(series, utc=True, errors="coerce")
+        if t == "decimal":
+            return _coerce_decimal(series)
+        if t == "json":
+            return _coerce_json(series)
+        raise SpecError(f"Unsupported data type in spec: {col.data_type}")
+    except SpecError:
+        raise
+    except Exception as err:
+        raise Exception(f'Failed to convert type for column {col.name}: {err}')
 
 
 def _coerce_decimal(series: pd.Series) -> pd.Series:

@@ -7,7 +7,7 @@ from typing import Callable
 import pandas as pd
 
 from .mapping.config import MappingConfig, MappingRule
-from .spec import FocusSpec
+from .spec import FocusSpec, FocusColumnSpec
 
 
 PromptFunc = Callable[[str], str]
@@ -26,21 +26,25 @@ def run_wizard(
     prompt: PromptFunc,
     include_optional: bool,
     include_recommended: bool,
+    include_conditional: bool
 ) -> WizardResult:
     columns = list(input_df.columns)
     normalized = {_norm(c): c for c in columns}
 
     targets = _select_targets(
-        spec, include_optional=include_optional, include_recommended=include_recommended
+        spec,
+        include_optional=include_optional,
+        include_recommended=include_recommended,
+        include_conditional=include_conditional
     )
     rules: list[MappingRule] = []
 
     for target in targets:
-        suggested = _suggest_column(target, normalized)
+        suggested = _suggest_column(target.name, normalized)
         steps = _prompt_for_steps(
             target=target, columns=columns, suggested=suggested, prompt=prompt
         )
-        rules.append(MappingRule(target=target, steps=steps, description=None))
+        rules.append(MappingRule(target=target.name, steps=steps, description=None))
 
     # Extension columns
     ext_rules = _prompt_extension_columns(columns=columns, prompt=prompt)
@@ -53,34 +57,33 @@ def run_wizard(
 
 
 def _select_targets(
-    spec: FocusSpec, *, include_optional: bool, include_recommended: bool
-) -> list[str]:
-    targets: list[str] = []
+    spec: FocusSpec, *, include_optional: bool, include_recommended: bool, include_conditional: bool
+) -> list[FocusColumnSpec]:
+    targets: list[FocusColumnSpec] = []
     for col in spec.columns:
         level = col.feature_level.strip().lower()
         if level == "mandatory":
-            targets.append(col.name)
+            targets.append(col)
         elif level == "recommended" and include_recommended:
-            targets.append(col.name)
+            targets.append(col)
         elif level == "optional" and include_optional:
-            targets.append(col.name)
-        elif level == "conditional":
-            # conditional columns are not automatically selected
-            continue
+            targets.append(col)
+        elif level == "conditional" and include_conditional:
+            targets.append(col)
     return targets
 
 
 def _prompt_for_steps(
     *,
-    target: str,
+    target: FocusColumnSpec,
     columns: list[str],
     suggested: str | None,
     prompt: PromptFunc,
 ) -> list[dict]:
-    header = f"Target: {target}"
+    header = f"{'=' * 50}\nTarget column: \n\t{target.name} ({target.feature_level})"
     if suggested:
-        header += f" (suggested input: {suggested})"
-    _ = prompt(f"{header}\n")
+        header += f"\n\t(suggested input: {suggested})"
+    _ = print(f"{header}\n")
 
     while True:
         choice = prompt(
@@ -131,7 +134,7 @@ def _pick_column(
         if use in {"", "y", "yes"}:
             return suggested
 
-    prompt("Available columns:\n" + "\n".join(f"- {c}" for c in columns) + "\n")
+    print("Available columns:\n" + "\n".join(f"- {c}" for c in columns) + "\n")
     while True:
         col = prompt("Enter column name: ").strip()
         if col in columns:
@@ -154,7 +157,7 @@ def _pick_columns(
     else:
         picked = []
 
-    prompt("Available columns:\n" + "\n".join(f"- {c}" for c in columns) + "\n")
+    print("Available columns:\n" + "\n".join(f"- {c}" for c in columns) + "\n")
     while True:
         col = prompt("Add column (empty to finish): ").strip()
         if not col:

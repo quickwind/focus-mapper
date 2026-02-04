@@ -48,6 +48,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Include Recommended columns in the wizard",
     )
     p.add_argument(
+        "--include-conditional",
+        action="store_true",
+        help="Include Conditional columns in the wizard",
+    )
+    p.add_argument(
         "--include-optional",
         action="store_true",
         help="Include Optional columns in the wizard",
@@ -151,18 +156,24 @@ def main(argv: list[str] | None = None) -> int:
         answer = prompt("Include Recommended columns? [y/N] ").strip().lower()
         include_recommended = answer in {"y", "yes"}
 
+    include_conditional = args.include_conditional
+    if not include_conditional:
+        answer = prompt("Include Conditional columns? [y/N] ").strip().lower()
+        include_conditional = answer in {"y", "yes"}
+
     include_optional = args.include_optional
     if not include_optional:
         answer = prompt("Include Optional columns? [y/N] ").strip().lower()
         include_optional = answer in {"y", "yes"}
 
-    logger.info("Starting interactive wizard...")
+    logger.debug("Starting interactive wizard...")
     result = run_wizard(
         spec=spec,
         input_df=df,
         prompt=prompt,
         include_optional=include_optional,
         include_recommended=include_recommended,
+        include_conditional=include_conditional,
     )
 
     try:
