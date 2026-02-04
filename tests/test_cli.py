@@ -118,9 +118,10 @@ def test_wizard_cli_prompts_for_missing_args(tmp_path: Path, monkeypatch) -> Non
         str(out),
         "n",
         "n",
+        "n",
     ]
     for _ in range(mandatory_count):
-        inputs_list.extend(["", "4"])
+        inputs_list.extend(["", "5"])
     inputs_list.append("n")
     inputs = iter(inputs_list)
 

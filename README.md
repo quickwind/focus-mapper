@@ -83,6 +83,7 @@ mappings:
 | `round` | Round the current numeric value | `ndigits` (int, default 0) | `- op: round`<br>`  ndigits: 2` |
 | `math` | Perform arithmetic (+, -, *, /) | `operator` (string), `operands` (list) | `- op: math`<br>`  operator: add`<br>`  operands: [{column: "tax"}]` |
 | `when` | Simple `if column == value then X else Y` logic | `column`, `value`, `then`, `else` | `- op: when`<br>`  column: "id"`<br>`  value: 0`<br>`  then: "N/A"` |
+| `pandas_expr` | Evaluate a safe pandas expression to produce a column | `expr` (string) | `- op: pandas_expr`<br>`  expr: "df['a'] + df['b']"` |
 
 ### Extension Columns
 Custom columns MUST start with the `x_` prefix. They will be appended to the output dataset and documented in the generated metadata if a `description` is provided.

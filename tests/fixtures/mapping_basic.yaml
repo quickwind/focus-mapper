@@ -31,29 +31,29 @@ mappings:
 
   BillingPeriodStart:
     steps:
-      - op: from_column
-        column: billing_period_start
+      - op: pandas_expr
+        expr: 'pd.to_datetime(df["billing_period"] + "-01", utc=True)'
       - op: cast
         to: datetime
 
   BillingPeriodEnd:
     steps:
-      - op: from_column
-        column: billing_period_end
+      - op: pandas_expr
+        expr: 'pd.to_datetime((df["billing_period"].str.slice(0,4).astype(int) + ((df["billing_period"].str.slice(5,7).astype(int) + 1) > 12).astype(int)).astype(str) + "-" + (((df["billing_period"].str.slice(5,7).astype(int) + 1 - 1) % 12) + 1).astype(str).str.replace(r"^(\\d)$", r"0\\1", regex=True) + "-01", utc=True)'
       - op: cast
         to: datetime
 
   ChargePeriodStart:
     steps:
-      - op: from_column
-        column: charge_period_start
+      - op: pandas_expr
+        expr: 'pd.to_datetime(df["billing_date"] + "T" + df["billing_hour"].astype(int).astype(str).str.replace(r"^(\\d)$", r"0\\1", regex=True) + ":00:00Z", utc=True)'
       - op: cast
         to: datetime
 
   ChargePeriodEnd:
     steps:
-      - op: from_column
-        column: charge_period_end
+      - op: pandas_expr
+        expr: 'pd.to_datetime(df["billing_date"] + "T" + df["billing_hour"].astype(int).astype(str).str.replace(r"^(\\d)$", r"0\\1", regex=True) + ":00:00Z", utc=True) + pd.to_timedelta(1, unit="h")'
       - op: cast
         to: datetime
 
@@ -127,8 +127,8 @@ mappings:
 
   EffectiveCost:
     steps:
-      - op: from_column
-        column: billed_cost
+      - op: pandas_expr
+        expr: "df['billed_cost'] + df['tax_amount']"
       - op: cast
         to: decimal
         scale: 2

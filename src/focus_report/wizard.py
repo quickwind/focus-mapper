@@ -87,7 +87,7 @@ def _prompt_for_steps(
 
     while True:
         choice = prompt(
-            "Choose mapping: [1] from_column [2] const [3] coalesce [4] skip\n> "
+            "Choose mapping: [1] from_column [2] const [3] coalesce [4] pandas_expr [5] skip\n> "
         ).strip()
         if choice in {"1", "from_column"}:
             col = _pick_column(columns, prompt=prompt, suggested=suggested)
@@ -98,7 +98,12 @@ def _prompt_for_steps(
         if choice in {"3", "coalesce"}:
             cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
             return [{"op": "coalesce", "columns": cols}]
-        if choice in {"4", "skip"}:
+        if choice in {"4", "pandas_expr"}:
+            expr = prompt(
+                "Enter pandas expression (use df, pd, and/or current): "
+            ).strip()
+            return [{"op": "pandas_expr", "expr": expr}]
+        if choice in {"5", "skip"}:
             return [{"op": "const", "value": None}]
 
 

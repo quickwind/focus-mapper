@@ -17,7 +17,7 @@ def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:
         "",  # use suggested
     ]
     for _ in range(len(spec.columns) - 1):
-        inputs_list.extend(["", "4"])  # header + skip
+        inputs_list.extend(["", "5"])  # header + skip
     inputs_list.append("n")  # no extension
     inputs = iter(inputs_list)
 
@@ -30,6 +30,7 @@ def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:
         prompt=fake_input,
         include_optional=False,
         include_recommended=False,
+        include_conditional=False,
     )
 
     assert result.mapping.spec_version == "v1.2"

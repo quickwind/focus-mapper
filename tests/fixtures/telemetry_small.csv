@@ -1,3 +1,3 @@
-billing_period_start,billing_period_end,charge_period_start,charge_period_end,billing_currency,billed_cost,charge_category,charge_class,charge_description,pricing_quantity,pricing_unit
-2024-01-01T00:00:00Z,2024-02-01T00:00:00Z,2024-01-01T00:00:00Z,2024-01-02T00:00:00Z,USD,12.34,Usage,Normal,"Compute usage",1,Hours
-2024-01-01T00:00:00Z,2024-02-01T00:00:00Z,2024-01-02T00:00:00Z,2024-01-03T00:00:00Z,USD,5.00,Tax,Normal,"Sales tax",1,Hours
+billing_period,billing_date,billing_hour,billing_currency,billed_cost,tax_amount,charge_category,charge_class,charge_description,pricing_quantity,pricing_unit
+2026-01,2026-01-30,4,USD,12.34,1.23,Usage,Normal,"Compute usage",1,Hours
+2026-01,2026-01-30,5,USD,5.00,0.50,Tax,Normal,"Sales tax",1,Hours

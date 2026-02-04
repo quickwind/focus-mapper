@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -7,6 +8,148 @@ from typing import Any
 import pandas as pd
 
 from ..errors import MappingExecutionError
+
+
+_ALLOWED_PANDAS_NAMES = {"df", "pd", "current", "str", "int", "float"}
+_ALLOWED_PANDAS_CALLS = {
+    # pandas top-level helpers
+    "to_datetime",
+    "to_numeric",
+    "to_timedelta",
+    # DataFrame/Series ops
+    "groupby",
+    "agg",
+    "aggregate",
+    "transform",
+    "sum",
+    "mean",
+    "min",
+    "max",
+    "count",
+    "nunique",
+    "astype",
+    "fillna",
+    "where",
+    "map",
+    "combine_first",
+    "replace",
+    "round",
+    "clip",
+    "abs",
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "pow",
+    "shift",
+    "diff",
+    "cumsum",
+    "cummax",
+    "cummin",
+    "cumprod",
+    # str/dt accessors
+    "lower",
+    "upper",
+    "strip",
+    "replace",
+    "contains",
+    "startswith",
+    "endswith",
+    "slice",
+    "len",
+    "year",
+    "month",
+    "day",
+    "date",
+    "floor",
+    "ceil",
+}
+_DISALLOWED_PANDAS_NODES = (
+    ast.Lambda,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+    ast.Await,
+    ast.Yield,
+    ast.YieldFrom,
+    ast.NamedExpr,
+    ast.JoinedStr,
+    ast.FormattedValue,
+)
+
+
+def _validate_pandas_expr(expr: str) -> None:
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError as e:
+        raise MappingExecutionError(f"Invalid pandas_expr syntax: {e.msg}") from e
+
+    for node in ast.walk(tree):
+        if isinstance(node, _DISALLOWED_PANDAS_NODES):
+            raise MappingExecutionError("pandas_expr contains disallowed syntax")
+
+        if isinstance(node, ast.Name):
+            if node.id not in _ALLOWED_PANDAS_NAMES:
+                raise MappingExecutionError(
+                    f"pandas_expr uses disallowed name: {node.id}"
+                )
+
+        if isinstance(node, ast.Attribute):
+            if node.attr.startswith("_"):
+                raise MappingExecutionError("pandas_expr uses private attribute access")
+
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name):
+                if func.id not in _ALLOWED_PANDAS_CALLS:
+                    raise MappingExecutionError(
+                        f"pandas_expr calls disallowed function: {func.id}"
+                    )
+            elif isinstance(func, ast.Attribute):
+                if func.attr not in _ALLOWED_PANDAS_CALLS:
+                    raise MappingExecutionError(
+                        f"pandas_expr calls disallowed method: {func.attr}"
+                    )
+            else:
+                raise MappingExecutionError("pandas_expr uses disallowed call target")
+
+            for kw in node.keywords:
+                if kw.arg is None:
+                    raise MappingExecutionError("pandas_expr disallows **kwargs")
+
+
+def _eval_pandas_expr(
+    expr: str, *, df: pd.DataFrame, current: pd.Series | None, target: str
+) -> pd.Series:
+    _validate_pandas_expr(expr)
+
+    try:
+        result = eval(  # noqa: S307 - guarded by AST validation and no builtins
+            compile(expr, "<pandas_expr>", "eval"),
+            {"__builtins__": {}},
+            {"df": df, "pd": pd, "current": current, "str": str, "int": int, "float": float},
+        )
+    except Exception as e:
+        raise MappingExecutionError(
+            f"pandas_expr failed for target {target}: {e}"
+        ) from e
+
+    if isinstance(result, pd.Series):
+        return result
+    if isinstance(result, pd.DataFrame):
+        raise MappingExecutionError(
+            f"pandas_expr must return a Series or scalar for target {target}"
+        )
+    if isinstance(result, (list, tuple)):
+        if len(result) != len(df):
+            raise MappingExecutionError(
+                f"pandas_expr result length mismatch for target {target}"
+            )
+        return pd.Series(result, index=df.index)
+
+    # scalar or None
+    return pd.Series([result] * len(df), index=df.index)
 
 
 def apply_steps(
@@ -240,6 +383,15 @@ def apply_steps(
             series = src.where(src != value, other=then_value)
             assert series is not None
             series = series.fillna(else_value)
+            continue
+
+        if op == "pandas_expr":
+            expr = step.get("expr")
+            if not isinstance(expr, str) or not expr:
+                raise MappingExecutionError(
+                    f"pandas_expr requires non-empty 'expr' for target {target}"
+                )
+            series = _eval_pandas_expr(expr, df=df, current=series, target=target)
             continue
 
         raise MappingExecutionError(f"Unknown op '{op}' for target {target}")
