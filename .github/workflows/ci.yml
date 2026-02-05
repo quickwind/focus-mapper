@@ -7,6 +7,8 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
@@ -32,9 +34,9 @@ jobs:
         if: ${{ !(matrix.pandas == '1.5' && matrix.python-version == '3.12') }}
         run: pytest
       - name: Upload coverage
-        if: ${{ secrets.CODECOV_TOKEN != '' && !(matrix.pandas == '1.5' && matrix.python-version == '3.12') }}
+        if: ${{ env.CODECOV_TOKEN != '' && !(matrix.pandas == '1.5' && matrix.python-version == '3.12') }}
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ env.CODECOV_TOKEN }}
           fail_ci_if_error: false
