@@ -62,22 +62,12 @@ class PathCompleter:
             try:
                 matches = glob.glob(pattern)
                 results = []
-                if os.name == "nt":
-                    slash_idx = max(
-                        full_path_prefix.rfind("/"),
-                        full_path_prefix.rfind("\\"),
-                    )
-                    dir_prefix = full_path_prefix[: slash_idx + 1] if slash_idx >= 0 else ""
                 for m in matches:
                     name = os.path.basename(m.rstrip(os.sep))
                     if os.path.isdir(m):
                         name += os.sep
-                    if os.name == "nt":
-                        # On Windows, the entire path is one token; return full completion.
-                        results.append(f"{dir_prefix}{name}")
-                    else:
-                        # On Unix, return only the basename for the current token.
-                        results.append(name)
+                    # Return only the basename for the current token.
+                    results.append(name)
 
                 self.matches = sorted(list(set(results)))
             except Exception:
@@ -114,15 +104,8 @@ def path_completion() -> Generator[None, None, None]:
         # Crucial: include '/' in delimiters so readline treats path segments as tokens.
         # On Windows, do not treat backslash or ':' as delimiters.
         if os.name == "nt":
-            readline.set_completer_delims(" \t\n\"'`@$><=;|&{(/")
-            if hasattr(readline, "set_completion_display_matches_hook"):
-                def _display_hook(substitution, matches, longest):  # type: ignore[no-redef]
-                    basenames = [os.path.basename(m.rstrip("\\/")) for m in matches]
-                    print()
-                    print("  " + "  ".join(basenames))
-                    readline.redisplay()
-
-                readline.set_completion_display_matches_hook(_display_hook)
+            # Treat both slash and backslash as delimiters so completion keeps the prefix.
+            readline.set_completer_delims(" \t\n\"'`@$><=;|&{(/\\")
         else:
             readline.set_completer_delims(" \t\n\"\\'`@$><=;|&{(/")
         yield
