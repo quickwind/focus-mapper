@@ -65,6 +65,7 @@ Optional flags:
 
 Tip: column name prompts support tab‑completion (case‑insensitive).
 The wizard will also show a summary of default validation settings and let you override them globally or per column.
+For standard FOCUS columns, the wizard does not offer a `cast` option because the generator will coerce to the spec type automatically.
 
 ## Mapping YAML Specification
 
@@ -110,6 +111,11 @@ mappings:
       - op: cast
         to: "decimal"
         scale: 2
+    validation:
+      decimal:
+        precision: 12
+        scale: 2
+        min: 0
 ```
 
 ### Validation Overrides (Optional)
@@ -245,7 +251,7 @@ mappings:
 | `coalesce` | Pick the first non-null value across multiple columns, left to right. | `columns` (list of strings) | `- op: coalesce`<br>`  columns: ["a", "b"]` |
 | `map_values` | Replace values using a lookup dictionary. If a value is missing, use `default` (or null if not set). Can start from `column` or the current series. | `mapping` (dict), `default` (optional), `column` (optional) | `- op: map_values`<br>`  column: "charge_category"`<br>`  mapping: {"Usage": "U", "Tax": "T"}` |
 | `concat` | Join multiple columns into a single string. Nulls are treated as empty strings. | `columns` (list), `sep` (string, default "") | `- op: concat`<br>`  columns: ["tag_a", "tag_b"]`<br>`  sep: "-"` |
-| `cast` | Convert the current series to a specific type. Use `decimal` for money and `datetime` for timestamps. | `to` (string: `string|float|int|datetime|decimal`), `scale` (int, decimal only) | `- op: cast`<br>`  to: "decimal"`<br>`  scale: 2` |
+| `cast` | Convert the current series to a specific type. Use `decimal` for money and `datetime` for timestamps. | `to` (string: `string|float|int|datetime|decimal`), `scale` (int, decimal only), `precision` (int, decimal only) | `- op: cast`<br>`  to: "decimal"`<br>`  scale: 2`<br>`  precision: 12` |
 | `round` | Round the current numeric series to `ndigits`. | `ndigits` (int, default 0) | `- op: round`<br>`  ndigits: 2` |
 | `math` | Row-wise arithmetic across columns or constants. Supports `add`, `sub`, `mul`, `div`. Use `operands` to list inputs. | `operator` (string), `operands` (list of `{column}` or `{const}`) | `- op: math`<br>`  operator: add`<br>`  operands: [{column: "cost"}, {column: "tax"}]` |
 | `when` | Conditional assignment: if `column == value` then `then`, else `else`. | `column`, `value`, `then`, `else` (optional) | `- op: when`<br>`  column: "charge_category"`<br>`  value: "Tax"`<br>`  then: "Y"`<br>`  else: "N"` |

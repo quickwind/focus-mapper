@@ -16,10 +16,11 @@ def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:
         "",  # header prompt for first target
         "1",  # from_column
         "",  # use suggested
+        "6",  # done (no more steps)
         "n",  # no per-column validation override
     ]
     for _ in range(len(spec.columns) - 1):
-        inputs_list.extend(["", "11"])  # header + skip
+        inputs_list.extend(["", "8"])  # header + skip
     inputs_list.append("n")  # no extension
     inputs = iter(inputs_list)
 

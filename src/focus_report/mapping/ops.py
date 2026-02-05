@@ -279,7 +279,12 @@ def apply_steps(
                     raise MappingExecutionError(
                         f"cast decimal scale must be int for target {target}"
                     )
-                series = _cast_decimal(series, scale=scale)
+                precision = step.get("precision")
+                if precision is not None and not isinstance(precision, int):
+                    raise MappingExecutionError(
+                        f"cast decimal precision must be int for target {target}"
+                    )
+                series = _cast_decimal(series, scale=scale, precision=precision)
                 continue
 
             raise MappingExecutionError(
@@ -401,8 +406,10 @@ def apply_steps(
     return series
 
 
-def _cast_decimal(series: pd.Series, *, scale: int | None) -> pd.Series:
-    """Safely converts a series to Decimal objects with optional scaling."""
+def _cast_decimal(
+    series: pd.Series, *, scale: int | None, precision: int | None
+) -> pd.Series:
+    """Safely converts a series to Decimal objects with optional scaling/precision."""
 
     def conv(v: Any) -> Any:
         if v is None or (isinstance(v, float) and pd.isna(v)) or v is pd.NA:
@@ -412,6 +419,13 @@ def _cast_decimal(series: pd.Series, *, scale: int | None) -> pd.Series:
             if scale is not None:
                 q = Decimal(1).scaleb(-scale)
                 d = d.quantize(q)
+            if precision is not None:
+                tup = d.as_tuple()
+                digits = len(tup.digits)
+                exp = tup.exponent
+                actual_precision = digits + exp if exp >= 0 else digits
+                if actual_precision > precision:
+                    return None
             return d
         except (InvalidOperation, ValueError):
             return None

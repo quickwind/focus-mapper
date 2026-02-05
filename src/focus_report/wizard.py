@@ -50,6 +50,11 @@ def run_wizard(
             target=target, columns=columns, suggested=suggested, prompt=prompt
         )
         if steps:
+            steps = _maybe_append_cast(
+                steps=steps,
+                data_type=target.data_type,
+                numeric_scale=target.numeric_scale,
+            )
             validation = _prompt_column_validation(
                 target_name=target.name,
                 data_type=target.data_type,
@@ -107,92 +112,171 @@ def _prompt_for_steps(
         header += f"\n\t(suggested input: {suggested})"
     _ = print(f"{header}\n")
 
+    allow_cast = target.data_type.strip().lower() not in {
+        "string",
+        "decimal",
+        "date/time",
+        "json",
+    }
+    steps: list[dict] = []
+    has_series = False
     while True:
-        choice = prompt(
-            "Choose mapping: [1] from_column [2] const [3] coalesce [4] map_values "
-            "[5] concat [6] cast [7] round [8] math [9] when [10] pandas_expr [11] skip\n> "
-        ).strip()
-        if choice in {"1", "from_column"}:
-            col = _pick_column(columns, prompt=prompt, suggested=suggested)
-            return [{"op": "from_column", "column": col}]
-        if choice in {"2", "const"}:
-            value = prompt("Enter constant value (empty for null): ")
-            return [{"op": "const", "value": value if value != "" else None}]
-        if choice in {"3", "coalesce"}:
-            cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
-            return [{"op": "coalesce", "columns": cols}]
-        if choice in {"4", "map_values"}:
-            col = _pick_column(columns, prompt=prompt, suggested=suggested)
-            mapping: dict[str, str] = {}
-            print("Enter mapping pairs (empty key to finish).")
-            while True:
-                key = prompt("  from: ").strip()
-                if not key:
-                    break
-                val = prompt("  to: ").strip()
-                mapping[key] = val
-            default = prompt("Default value (empty for null): ").strip()
-            step: dict = {"op": "map_values", "column": col, "mapping": mapping}
-            if default != "":
-                step["default"] = default
-            return [step]
-        if choice in {"5", "concat"}:
-            cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
-            sep = prompt("Separator (empty for none): ").strip()
-            return [{"op": "concat", "columns": cols, "sep": sep}]
-        if choice in {"6", "cast"}:
-            col = _pick_column(columns, prompt=prompt, suggested=suggested)
-            to = prompt(
-                "Cast to type [string|float|int|datetime|decimal]: "
-            ).strip()
-            step: dict = {"op": "cast", "to": to}
-            if to == "decimal":
-                scale = prompt("Decimal scale (int, empty for none): ").strip()
-                if scale != "":
-                    step["scale"] = int(scale)
-            return [{"op": "from_column", "column": col}, step]
-        if choice in {"7", "round"}:
-            col = _pick_column(columns, prompt=prompt, suggested=suggested)
-            ndigits = prompt("Round ndigits (int, default 0): ").strip()
-            step = {"op": "round", "ndigits": int(ndigits) if ndigits else 0}
-            return [{"op": "from_column", "column": col}, step]
-        if choice in {"8", "math"}:
-            operator = prompt("Operator [add|sub|mul|div]: ").strip()
-            operands: list[dict] = []
-            while True:
-                kind = prompt(
-                    "Add operand type [column|const] (empty to finish): "
+        if not has_series:
+            if allow_cast:
+                choice = prompt(
+                    "Choose mapping (init): [1] from_column [2] const [3] coalesce "
+                    "[4] map_values [5] concat [6] math [7] pandas_expr [8] skip\n> "
                 ).strip()
-                if not kind:
-                    break
-                if kind == "column":
-                    col = _pick_column(columns, prompt=prompt, suggested=suggested)
-                    operands.append({"column": col})
-                elif kind == "const":
-                    val = prompt("Constant value: ").strip()
-                    operands.append({"const": val})
-            return [{"op": "math", "operator": operator, "operands": operands}]
-        if choice in {"9", "when"}:
-            col = _pick_column(columns, prompt=prompt, suggested=suggested)
-            value = prompt("If value equals: ").strip()
-            then_value = prompt("Then value: ").strip()
-            else_value = prompt("Else value (empty for null): ").strip()
-            step: dict = {
-                "op": "when",
-                "column": col,
-                "value": value,
-                "then": then_value,
-            }
-            if else_value != "":
-                step["else"] = else_value
-            return [step]
-        if choice in {"10", "pandas_expr"}:
-            expr = prompt(
-                "Enter pandas expression (use df, pd, and/or current): "
-            ).strip()
-            return [{"op": "pandas_expr", "expr": expr}]
-        if choice in {"11", "skip"}:
-            return []
+            else:
+                choice = prompt(
+                    "Choose mapping (init): [1] from_column [2] const [3] coalesce "
+                    "[4] map_values [5] concat [6] math [7] pandas_expr [8] skip\n> "
+                ).strip()
+            if choice in {"8", "skip"}:
+                return []
+        else:
+            if allow_cast:
+                choice = prompt(
+                    "Add step: [1] map_values [2] cast [3] round [4] math "
+                    "[5] when [6] pandas_expr [7] done\n> "
+                ).strip()
+            else:
+                choice = prompt(
+                    "Add step: [1] map_values [2] round [3] math "
+                    "[4] when [5] pandas_expr [6] done\n> "
+                ).strip()
+            if choice in {"7", "done"} or (not allow_cast and choice in {"6", "done"}):
+                return steps
+
+        if not has_series:
+            if choice in {"1", "from_column"}:
+                col = _pick_column(columns, prompt=prompt, suggested=suggested)
+                steps.append({"op": "from_column", "column": col})
+                has_series = True
+            elif choice in {"2", "const"}:
+                value = prompt("Enter constant value (empty for null): ")
+                steps.append({"op": "const", "value": value if value != "" else None})
+                has_series = True
+            elif choice in {"3", "coalesce"}:
+                cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
+                steps.append({"op": "coalesce", "columns": cols})
+                has_series = True
+            elif choice in {"4", "map_values"}:
+                col = _pick_column(columns, prompt=prompt, suggested=suggested)
+                mapping: dict[str, str] = {}
+                print("Enter mapping pairs (empty key to finish).")
+                while True:
+                    key = prompt("  from: ").strip()
+                    if not key:
+                        break
+                    val = prompt("  to: ").strip()
+                    mapping[key] = val
+                default = prompt("Default value (empty for null): ").strip()
+                step = {"op": "map_values", "column": col, "mapping": mapping}
+                if default != "":
+                    step["default"] = default
+                steps.append(step)
+                has_series = True
+            elif choice in {"5", "concat"}:
+                cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
+                sep = prompt("Separator (empty for none): ").strip()
+                steps.append({"op": "concat", "columns": cols, "sep": sep})
+                has_series = True
+            elif choice in {"6", "math"}:
+                operator = prompt("Operator [add|sub|mul|div]: ").strip()
+                operands: list[dict] = []
+                while True:
+                    kind = prompt(
+                        "Add operand type [column|const] (empty to finish): "
+                    ).strip()
+                    if not kind:
+                        break
+                    if kind == "column":
+                        col = _pick_column(columns, prompt=prompt, suggested=suggested)
+                        operands.append({"column": col})
+                    elif kind == "const":
+                        val = prompt("Constant value: ").strip()
+                        operands.append({"const": val})
+                steps.append({"op": "math", "operator": operator, "operands": operands})
+                has_series = True
+            elif choice in {"7", "pandas_expr"}:
+                expr = prompt(
+                    "Enter pandas expression (use df, pd, and/or current): "
+                ).strip()
+                steps.append({"op": "pandas_expr", "expr": expr})
+                has_series = True
+        else:
+            if choice in {"1", "map_values"}:
+                mapping: dict[str, str] = {}
+                print("Enter mapping pairs (empty key to finish).")
+                while True:
+                    key = prompt("  from: ").strip()
+                    if not key:
+                        break
+                    val = prompt("  to: ").strip()
+                    mapping[key] = val
+                default = prompt("Default value (empty for null): ").strip()
+                step = {"op": "map_values", "mapping": mapping}
+                if default != "":
+                    step["default"] = default
+                steps.append(step)
+            elif allow_cast and choice in {"2", "cast"}:
+                to = prompt(
+                    "Cast to type [string|float|int|datetime|decimal]: "
+                ).strip()
+                step: dict = {"op": "cast", "to": to}
+                if to == "decimal":
+                    scale = prompt("Decimal scale (int, empty for none): ").strip()
+                    if scale != "":
+                        step["scale"] = int(scale)
+                    precision = prompt(
+                        "Decimal precision (int, empty for none): "
+                    ).strip()
+                    if precision != "":
+                        step["precision"] = int(precision)
+                steps.append(step)
+            elif (allow_cast and choice in {"3", "round"}) or (not allow_cast and choice in {"2", "round"}):
+                ndigits = prompt("Round ndigits (int, default 0): ").strip()
+                steps.append(
+                    {"op": "round", "ndigits": int(ndigits) if ndigits else 0}
+                )
+            elif (allow_cast and choice in {"4", "math"}) or (not allow_cast and choice in {"3", "math"}):
+                operator = prompt("Operator [add|sub|mul|div]: ").strip()
+                operands: list[dict] = []
+                while True:
+                    kind = prompt(
+                        "Add operand type [current|column|const] (empty to finish): "
+                    ).strip()
+                    if not kind:
+                        break
+                    if kind == "current":
+                        operands.append({"current": True})
+                    elif kind == "column":
+                        col = _pick_column(columns, prompt=prompt, suggested=suggested)
+                        operands.append({"column": col})
+                    elif kind == "const":
+                        val = prompt("Constant value: ").strip()
+                        operands.append({"const": val})
+                steps.append({"op": "math", "operator": operator, "operands": operands})
+            elif (allow_cast and choice in {"5", "when"}) or (not allow_cast and choice in {"4", "when"}):
+                col = _pick_column(columns, prompt=prompt, suggested=suggested)
+                value = prompt("If value equals: ").strip()
+                then_value = prompt("Then value: ").strip()
+                else_value = prompt("Else value (empty for null): ").strip()
+                step: dict = {
+                    "op": "when",
+                    "column": col,
+                    "value": value,
+                    "then": then_value,
+                }
+                if else_value != "":
+                    step["else"] = else_value
+                steps.append(step)
+            elif (allow_cast and choice in {"6", "pandas_expr"}) or (not allow_cast and choice in {"5", "pandas_expr"}):
+                expr = prompt(
+                    "Enter pandas expression (use df, pd, and/or current): "
+                ).strip()
+                steps.append({"op": "pandas_expr", "expr": expr})
 
 
 def _prompt_extension_columns(
@@ -465,6 +549,32 @@ def _prompt_column_validation(
         out.setdefault("presence", {})["enforce"] = presence
 
     return out or None
+
+
+def _maybe_append_cast(
+    *, steps: list[dict], data_type: str | None, numeric_scale: int | None
+) -> list[dict]:
+    if not data_type or not steps:
+        return steps
+    if steps[-1].get("op") == "cast":
+        return steps
+
+    t = data_type.strip().lower()
+    to = None
+    if t == "string":
+        to = "string"
+    elif t == "decimal":
+        to = "decimal"
+    elif t == "date/time":
+        to = "datetime"
+
+    if to is None:
+        return steps
+
+    cast_step: dict = {"op": "cast", "to": to}
+    if to == "decimal" and numeric_scale is not None:
+        cast_step["scale"] = int(numeric_scale)
+    return [*steps, cast_step]
 
 
 def _prompt_int(prompt: PromptFunc, text: str) -> int | None:
