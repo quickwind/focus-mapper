@@ -1,6 +1,7 @@
 # focus-mapper
 
 ![CI](https://github.com/quickwind/focus-mapping/actions/workflows/ci.yml/badge.svg)
+[![Coverage](https://codecov.io/gh/quickwind/focus-mapping/branch/main/graph/badge.svg)](https://codecov.io/gh/quickwind/focus-mapping)
 
 Generate FinOps FOCUS compliant reports from a pre-flattened telemetry/billing table.
 
