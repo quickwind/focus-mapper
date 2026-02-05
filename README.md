@@ -22,26 +22,25 @@ pytest -q
 
 ## Supported Spec Versions
 
-Default spec version is `v1.2`. The CLI and wizard will detect any versions available under `src/focus_mapper/specs`.
+Default spec version is `v1.2`. Supported versions are `v1.1`, `v1.2`, and `v1.3`. `v1.0` is not supported.
 
 ## Populate Spec Versions
 
 Use the tool below to download and store a specific spec version from the upstream repository:
 
 ```bash
-python tools/populate_focus_spec.py --version 1.0
 python tools/populate_focus_spec.py --version 1.1
 python tools/populate_focus_spec.py --version 1.2
-python tools/populate_focus_spec.py --version 1.3
+python tools/populate_focus_spec.py --version 1.3 --path specification/datasets/cost_and_usage/columns
 ```
 
 If a version tag doesn’t exist, override the git ref:
 
 ```bash
-python tools/populate_focus_spec.py --version 1.3 --ref main
+python tools/populate_focus_spec.py --version 1.2 --ref main
 ```
 
-Then use `--spec v1.0` (or `v1.1`, `v1.3`) in the CLI.
+Then use `--spec v1.2` (or `v1.1`, `v1.3`) in the CLI.
 
 ## What You Need
 
@@ -99,7 +98,7 @@ report = validate_focus_dataframe(out, spec=spec, mapping=mapping)
 
 Notes:
 - Parquet support requires `pyarrow` (`pip install -e ".[parquet]"`).
-- Only `v1.2` is supported right now.
+- Supported specs: `v1.1`, `v1.2`, and `v1.3`. `v1.0` is not supported.
 - Validation overrides require passing `mapping` to `validate_focus_dataframe`.
 
 ## Mapping Wizard

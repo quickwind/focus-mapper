@@ -574,12 +574,6 @@
         "data_type": "String",
         "feature_level": "Mandatory",
         "value_format": "\\<not specified>"
-      },
-      "__self__": {
-        "allows_nulls": "False",
-        "data_type": "String",
-        "feature_level": "Mandatory",
-        "value_format": "\\<not specified>"
       }
     },
     "Schema": {
