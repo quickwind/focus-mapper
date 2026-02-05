@@ -9,6 +9,11 @@ try:
     import readline
 except ImportError:
     readline = None
+    if os.name == "nt":
+        try:
+            import pyreadline3 as readline  # type: ignore[no-redef]
+        except Exception:
+            readline = None
 
 
 class PathCompleter:
@@ -33,7 +38,10 @@ class PathCompleter:
             # We need to know the full path prefix leading up to the current token 'text'.
             # Since '/' is a delimiter, 'text' is just the last part of the path.
             # We find the start of the path by looking for the last delimiter that is NOT a slash.
-            path_delims = " \t\n\"\\'`@$><=;|&{("
+            if os.name == "nt":
+                path_delims = " \t\n\"'`@$><=;|&{("
+            else:
+                path_delims = " \t\n\"\\'`@$><=;|&{("
             path_start = 0
             # Cursor position in the current word
             for i in range(len(line) - 1, -1, -1):
@@ -93,8 +101,11 @@ def path_completion() -> Generator[None, None, None]:
             readline.parse_and_bind("tab: complete")
 
         # Crucial: include '/' in delimiters so readline treats path segments as tokens.
-        # This makes the completion UI show only the last segment (the hint).
-        readline.set_completer_delims(" \t\n\"\\'`@$><=;|&{(/")
+        # On Windows, do not treat backslash or ':' as delimiters.
+        if os.name == "nt":
+            readline.set_completer_delims(" \t\n\"'`@$><=;|&{(/")
+        else:
+            readline.set_completer_delims(" \t\n\"\\'`@$><=;|&{(/")
         yield
     finally:
         readline.set_completer(old_completer)

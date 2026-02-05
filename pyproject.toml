@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 dependencies = [
   "pandas>=2.0",
   "PyYAML>=6.0",
+  "pyreadline3>=3.5; platform_system == 'Windows'",
 ]
 
 [project.optional-dependencies]
