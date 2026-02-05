@@ -32,9 +32,9 @@ def generate_focus_dataframe(
 
     # Standard columns in canonical order
     for col in spec.column_names:
-        out[col] = pd.Series([pd.NA] * len(df))
         rule = mapping.rule_for_target(col)
         if rule:
+            out[col] = pd.Series([pd.NA] * len(df))
             out[col] = apply_steps(df, steps=rule.steps, target=col)
 
     # Append extension columns from mapping (order as provided).

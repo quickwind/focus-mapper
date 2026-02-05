@@ -264,6 +264,9 @@ def apply_steps(
             if to == "string":
                 series = series.astype("string")
                 continue
+            if to == "json":
+                series = series.astype("string")
+                continue
             if to == "float":
                 series = pd.to_numeric(series, errors="coerce")
                 continue

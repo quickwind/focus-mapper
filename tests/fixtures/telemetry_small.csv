@@ -1,3 +1,3 @@
 billing_period,billing_date,billing_hour,billing_currency,billed_cost,tax_amount,charge_category,charge_class,charge_description,alt_description,tag_a,tag_b,pricing_quantity,pricing_unit
-2026-01,2026-01-30,4,USD,12.34,1.23,Usage,Normal,"Compute usage",,"core","vm",1,Hours
+2025-12,2025-12-30,4,USD,12.34,1.23,Usage,Normal,"Compute usage",,"core","vm",1,Hours
 2026-01,2026-01-30,5,USD,5.00,0.50,Tax,Normal,"Sales tax","Alt tax desc","billing","tax",1,Hours
