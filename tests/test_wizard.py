@@ -20,7 +20,15 @@ def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:
         "n",  # no per-column validation override
     ]
     for _ in range(len(spec.columns) - 1):
-        inputs_list.extend(["", "8"])  # header + skip
+        inputs_list.extend(
+            [
+                "",  # header
+                "2",  # const
+                "",  # empty value
+                "6",  # done
+                "n",  # no per-column validation override
+            ]
+        )
     inputs_list.append("n")  # no extension
     inputs = iter(inputs_list)
 

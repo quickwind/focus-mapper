@@ -118,6 +118,7 @@ def _prompt_for_steps(
         "date/time",
         "json",
     }
+    allow_skip = target.feature_level.strip().lower() != "mandatory"
     steps: list[dict] = []
     has_series = False
     while True:
@@ -125,14 +126,18 @@ def _prompt_for_steps(
             if allow_cast:
                 choice = prompt(
                     "Choose mapping (init): [1] from_column [2] const [3] coalesce "
-                    "[4] map_values [5] concat [6] math [7] pandas_expr [8] skip\n> "
+                    "[4] map_values [5] concat [6] math [7] pandas_expr"
+                    + (" [8] skip" if allow_skip else "")
+                    + "\n> "
                 ).strip()
             else:
                 choice = prompt(
                     "Choose mapping (init): [1] from_column [2] const [3] coalesce "
-                    "[4] map_values [5] concat [6] math [7] pandas_expr [8] skip\n> "
+                    "[4] map_values [5] concat [6] math [7] pandas_expr"
+                    + (" [8] skip" if allow_skip else "")
+                    + "\n> "
                 ).strip()
-            if choice in {"8", "skip"}:
+            if allow_skip and choice in {"8", "skip"}:
                 return []
         else:
             if allow_cast:
