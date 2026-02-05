@@ -9,7 +9,7 @@ from typing import Callable
 import pandas as pd
 
 from .mapping.config import MappingConfig, MappingRule
-from .completer import column_completion
+from .completer import column_completion, value_completion
 from .spec import FocusSpec, FocusColumnSpec
 
 
@@ -159,8 +159,32 @@ def _prompt_for_steps(
                 steps.append({"op": "from_column", "column": col})
                 has_series = True
             elif choice in {"2", "const"}:
-                value = prompt("Enter constant value (empty for null): ")
-                steps.append({"op": "const", "value": value if value != "" else None})
+                allowed = target.allowed_values or []
+                allow_null = bool(target.allows_nulls)
+                if allowed:
+                    print("Allowed values:\n" + "\n".join(f"- {v}" for v in allowed) + "\n")
+                    while True:
+                        with value_completion(allowed):
+                            value = prompt(
+                                "Choose allowed value"
+                                + (" (empty for null)" if allow_null else "")
+                                + ": "
+                            ).strip()
+                        if (allow_null and value == "") or value in allowed:
+                            steps.append(
+                                {"op": "const", "value": value if value != "" else None}
+                            )
+                            break
+                else:
+                    value = prompt(
+                        "Enter constant value"
+                        + (" (empty for null)" if allow_null else "")
+                        + ": "
+                    )
+                    if value == "" and not allow_null:
+                        print("Null is not allowed for this column.\n")
+                        continue
+                    steps.append({"op": "const", "value": value if value != "" else None})
                 has_series = True
             elif choice in {"3", "coalesce"}:
                 cols = _pick_columns(columns, prompt=prompt, suggested=suggested)

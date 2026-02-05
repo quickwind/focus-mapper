@@ -10,25 +10,21 @@ def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:
     spec = load_focus_spec("v1.2")
     df = pd.read_csv("tests/fixtures/telemetry_small.csv")
 
-    # Minimal inputs: accept suggested columns and skip extras.
+    # Minimal inputs: use const for all targets.
     inputs_list = [
         "",  # use default validation settings
-        "",  # header prompt for first target
-        "1",  # from_column
-        "",  # use suggested
-        "6",  # done (no more steps)
-        "n",  # no per-column validation override
     ]
-    for _ in range(len(spec.columns) - 1):
-        inputs_list.extend(
-            [
-                "",  # header
-                "2",  # const
-                "",  # empty value
-                "6",  # done
-                "n",  # no per-column validation override
-            ]
-        )
+    mandatory_cols = [c for c in spec.columns if c.feature_level.lower() == "mandatory"]
+    for col in mandatory_cols:
+        inputs_list.append("2")  # const
+        if col.allowed_values:
+            inputs_list.append(col.allowed_values[0])
+        elif col.allows_nulls:
+            inputs_list.append("")
+        else:
+            inputs_list.append("X")
+        inputs_list.append("done")  # finish steps
+        inputs_list.append("n")  # no per-column validation override
     inputs_list.append("n")  # no extension
     inputs = iter(inputs_list)
 

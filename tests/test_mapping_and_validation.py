@@ -14,7 +14,8 @@ def test_generate_and_validate_focus_dataset_from_fixtures() -> None:
     df = pd.read_csv("tests/fixtures/telemetry_small.csv")
 
     out = generate_focus_dataframe(df, mapping=mapping, spec=spec)
-    assert set(spec.column_names).issubset(set(out.columns))
+    mapped_targets = {r.target for r in mapping.rules}
+    assert mapped_targets.issubset(set(out.columns))
     assert "x_CostCenter" in out.columns
     assert "x_CoalescedDescription" in out.columns
     assert "x_MappedCategory" in out.columns

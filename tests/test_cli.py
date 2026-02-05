@@ -121,16 +121,18 @@ def test_wizard_cli_prompts_for_missing_args(tmp_path: Path, monkeypatch) -> Non
         "n",
         "",  # use default validation settings
     ]
-    for _ in range(mandatory_count):
-        inputs_list.extend(
-            [
-                "",  # header
-                "2",  # const
-                "",  # empty value
-                "6",  # done
-                "n",  # no per-column validation override
-            ]
-        )
+
+    mandatory_cols = [c for c in spec.columns if c.feature_level.lower() == "mandatory"]
+    for col in mandatory_cols:
+        inputs_list.append("2")  # const
+        if col.allowed_values:
+            inputs_list.append(col.allowed_values[0])
+        elif col.allows_nulls:
+            inputs_list.append("")
+        else:
+            inputs_list.append("X")
+        inputs_list.append("done")  # finish steps
+        inputs_list.append("n")  # no per-column validation override
     inputs_list.append("n")
     inputs = iter(inputs_list)
 
