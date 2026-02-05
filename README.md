@@ -117,6 +117,31 @@ mappings:
 Validation is **permissive by default** unless you define `validation.default`. You can override validation for individual columns inside each mapping:
 
 ```yaml
+spec_version: "1.2"
+validation:
+  default:
+    mode: permissive
+    datetime:
+      format: null
+    decimal:
+      precision: null
+      scale: null
+      integer_only: false
+      min: 0
+      max: null
+    string:
+      min_length: null
+      max_length: 120
+      allow_empty: true
+      trim: true
+    json:
+      object_only: false
+    allowed_values:
+      case_insensitive: false
+    nullable:
+      allow_nulls: null
+    presence:
+      enforce: true
 mappings:
   BillingPeriodStart:
     steps:
@@ -126,7 +151,6 @@ mappings:
       mode: strict
       datetime:
         format: "%Y-%m-%dT%H:%M:%SZ"
-
   BilledCost:
     steps:
       - op: from_column
@@ -136,6 +160,13 @@ mappings:
         precision: 12
         scale: 2
         min: 0
+  Tags:
+    steps:
+      - op: from_column
+        column: tags_json
+    validation:
+      json:
+        object_only: true
 ```
 
 Validation override keys:
