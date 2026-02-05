@@ -27,12 +27,16 @@ classifiers = [
 ]
 urls = { "Homepage" = "https://github.com/wallacewei/focus-mapper", "Repository" = "https://github.com/wallacewei/focus-mapper" }
 dependencies = [
-  "pandas>=1.5,<3",
+  "pandas>=2,<3",
   "PyYAML>=5.4",
   "pyreadline3>=3.5; platform_system == 'Windows'",
 ]
 
 [project.optional-dependencies]
+pandas15 = [
+  "pandas>=1.5,<2",
+  "numpy<2",
+]
 parquet = [
   "pyarrow>=14.0",
 ]
