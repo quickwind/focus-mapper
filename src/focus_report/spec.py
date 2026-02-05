@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from importlib import resources
+from pathlib import Path as _Path
 from typing import Any
 
 from decimal import Decimal, InvalidOperation
@@ -129,21 +130,23 @@ def _coerce_json(series: pd.Series) -> pd.Series:
 def load_focus_spec(version: str) -> FocusSpec:
     """Loads a FOCUS specification from a versioned JSON artifact."""
     normalized = version.lower().removeprefix("v")
-    if normalized != "1.2":
-        raise SpecError(f"Unsupported spec version: {version}")
+    mod = normalized.replace(".", "_")
 
     try:
-        pkg = "focus_report.specs.v1_2"
+        pkg = f"focus_report.specs.v{mod}"
         with (
             resources.files(pkg)
-            .joinpath("focus_v1_2.json")
+            .joinpath(f"focus_v{mod}.json")
             .open("r", encoding="utf-8") as f
         ):
             raw = json.load(f)
     except FileNotFoundError as e:
         raise SpecError(
-            "Missing embedded spec artifact. Run tools/vendor_focus_v1_2.py to generate focus_v1_2.json."
+            "Missing embedded spec artifact. Run tools/vendor_focus_v1_2.py "
+            f"--version {normalized} to generate focus_v{mod}.json."
         ) from e
+    except ModuleNotFoundError as e:
+        raise SpecError(f"Unsupported spec version: {version}") from e
 
     cols: list[FocusColumnSpec] = []
     for item in raw["columns"]:
@@ -161,3 +164,20 @@ def load_focus_spec(version: str) -> FocusSpec:
         )
 
     return FocusSpec(version=raw["version"], source=raw.get("source"), columns=cols)
+
+
+def list_available_spec_versions() -> list[str]:
+    specs_dir = _Path(__file__).resolve().parent / "specs"
+    versions: list[str] = []
+    if not specs_dir.exists():
+        return versions
+    for child in specs_dir.iterdir():
+        if not child.is_dir():
+            continue
+        if not child.name.startswith("v"):
+            continue
+        mod = child.name[1:]
+        json_path = child / f"focus_v{mod}.json"
+        if json_path.exists():
+            versions.append("v" + mod.replace("_", "."))
+    return sorted(versions)

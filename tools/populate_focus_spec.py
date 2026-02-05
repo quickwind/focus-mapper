@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import argparse
 import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlopen
+from urllib.error import HTTPError
 
 
 @dataclass(frozen=True)
@@ -19,12 +21,15 @@ class Column:
     numeric_scale: int | None
 
 
-BASE = "https://raw.githubusercontent.com/FinOps-Open-Cost-and-Usage-Spec/FOCUS_Spec/v1.2/specification/columns"
+BASE = "https://raw.githubusercontent.com/FinOps-Open-Cost-and-Usage-Spec/FOCUS_Spec"
 
 
 def fetch_text(url: str) -> str:
-    with urlopen(url) as r:
-        return r.read().decode("utf-8")
+    try:
+        with urlopen(url) as r:
+            return r.read().decode("utf-8")
+    except HTTPError as e:
+        raise RuntimeError(f"Failed to fetch {url} (HTTP {e.code})") from e
 
 
 def parse_columns_mdpp(text: str) -> list[str]:
@@ -152,13 +157,52 @@ def parse_allowed_values(
     return values or None
 
 
-def main() -> int:
-    cols_mdpp = fetch_text(f"{BASE}/columns.mdpp")
+def _dest_dir(version: str) -> Path:
+    normalized = version.lower().removeprefix("v").replace(".", "_")
+    return Path(f"src/focus_report/specs/v{normalized}")
+
+
+def _dest_file(version: str) -> Path:
+    normalized = version.lower().removeprefix("v").replace(".", "_")
+    return _dest_dir(version) / f"focus_v{normalized}.json"
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="populate_focus_spec")
+    parser.add_argument(
+        "--version",
+        default="1.2",
+        help="FOCUS spec version to vendor (e.g., 1.0, 1.1, 1.2, 1.3)",
+    )
+    parser.add_argument(
+        "--ref",
+        default=None,
+        help="Git ref or tag to fetch from (defaults to v<version>, e.g. v1.2)",
+    )
+    parser.add_argument(
+        "--path",
+        default="specification/columns",
+        help="Path to spec columns in the repo (default: specification/columns)",
+    )
+    args = parser.parse_args(argv)
+    version = args.version
+    ref = args.ref or f"v{version}"
+    path = args.path
+
+    base = f"{BASE}/{ref}/{path}"
+
+    try:
+        cols_mdpp = fetch_text(f"{base}/columns.mdpp")
+    except RuntimeError as e:
+        raise RuntimeError(
+            f"{e}\nCheck that the version tag exists. You can override with "
+            f"--ref (e.g., --ref main or --ref v{version}.0)."
+        ) from e
     files = parse_columns_mdpp(cols_mdpp)
 
     columns: list[Column] = []
     for filename in files:
-        md = fetch_text(f"{BASE}/{filename}")
+        md = fetch_text(f"{base}/{filename}")
         constraints = parse_constraints(md)
 
         # Column ID is in a section:
@@ -212,10 +256,10 @@ def main() -> int:
         )
 
     out = {
-        "version": "1.2",
+        "version": version,
         "source": {
             "repo": "https://github.com/FinOps-Open-Cost-and-Usage-Spec/FOCUS_Spec",
-            "ref": "v1.2",
+            "ref": f"v{version}",
             "path": "specification/columns",
         },
         "columns": [
@@ -233,7 +277,12 @@ def main() -> int:
         ],
     }
 
-    dest = Path("src/focus_report/specs/v1_2/focus_v1_2.json")
+    dest_dir = _dest_dir(version)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    init_py = dest_dir / "__init__.py"
+    if not init_py.exists():
+        init_py.write_text("", encoding="utf-8")
+    dest = _dest_file(version)
     dest.write_text(json.dumps(out, indent=2, sort_keys=True), encoding="utf-8")
     print(f"Wrote {dest}")
     return 0

@@ -10,7 +10,7 @@ import yaml
 from .completer import path_completion
 from .io import read_table
 from .mapping.config import MappingConfig
-from .spec import load_focus_spec
+from .spec import load_focus_spec, list_available_spec_versions
 from .wizard import run_wizard
 
 logger = logging.getLogger("focus_report.wizard")
@@ -97,8 +97,18 @@ def main(argv: list[str] | None = None) -> int:
         return input(text)
 
     while True:
+        available = list_available_spec_versions()
+        default_spec = "v1.2"
+        if available and default_spec not in available:
+            default_spec = available[-1]
         spec_version = (
-            args.spec or prompt("FOCUS spec version [v1.2]: ").strip() or "v1.2"
+            args.spec
+            or prompt(
+                f"FOCUS spec version [{default_spec}]"
+                + (f" (available: {', '.join(available)})" if available else "")
+                + ": "
+            ).strip()
+            or default_spec
         )
         try:
             logger.debug("Loading FOCUS spec version: %s", spec_version)

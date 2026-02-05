@@ -17,6 +17,25 @@ python -m focus_report --help
 pytest -q
 ```
 
+## Supported Spec Versions
+
+Default spec version is `v1.2`. Other versions can be added by vendoring the spec:
+
+```bash
+python tools/populate_focus_spec.py --version 1.0
+python tools/populate_focus_spec.py --version 1.1
+python tools/populate_focus_spec.py --version 1.2
+python tools/populate_focus_spec.py --version 1.3
+```
+
+If a version tag doesn’t exist, override the git ref:
+
+```bash
+python tools/populate_focus_spec.py --version 1.3 --ref main
+```
+
+Then use `--spec v1.0` (or `v1.1`, `v1.3`) in the CLI. The CLIs will also show available versions detected under `src/focus_report/specs`.
+
 ## What You Need
 
 - A flat input table (CSV or Parquet).

@@ -13,7 +13,7 @@ from .io import read_table, write_table
 from .mapping.config import load_mapping_config
 from .mapping.executor import generate_focus_dataframe
 from .metadata import build_sidecar_metadata, write_sidecar_metadata
-from .spec import load_focus_spec
+from .spec import load_focus_spec, list_available_spec_versions
 from .validate import validate_focus_dataframe, write_validation_report
 
 logger = logging.getLogger("focus_report")
@@ -86,10 +86,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _cmd_generate(args: argparse.Namespace) -> int:
+    available = list_available_spec_versions()
+    default_spec = "v1.2"
+    if available and default_spec not in available:
+        default_spec = available[-1]
     spec_version = (
         getattr(args, "spec", None)
-        or _prompt("FOCUS spec version [v1.2]: ").strip()
-        or "v1.2"
+        or _prompt(
+            f"FOCUS spec version [{default_spec}]"
+            + (f" (available: {', '.join(available)})" if available else "")
+            + ": "
+        ).strip()
+        or default_spec
     )
     logger.debug("Loading FOCUS spec version: %s", spec_version)
     spec = load_focus_spec(spec_version)
@@ -167,10 +175,18 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
+    available = list_available_spec_versions()
+    default_spec = "v1.2"
+    if available and default_spec not in available:
+        default_spec = available[-1]
     spec_version = (
         getattr(args, "spec", None)
-        or _prompt("FOCUS spec version [v1.2]: ").strip()
-        or "v1.2"
+        or _prompt(
+            f"FOCUS spec version [{default_spec}]"
+            + (f" (available: {', '.join(available)})" if available else "")
+            + ": "
+        ).strip()
+        or default_spec
     )
     logger.debug("Loading FOCUS spec version: %s", spec_version)
     spec = load_focus_spec(spec_version)
