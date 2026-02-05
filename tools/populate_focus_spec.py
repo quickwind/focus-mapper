@@ -189,9 +189,11 @@ def main(argv: list[str] | None = None) -> int:
     ref = args.ref or f"v{version}"
     path = args.path
 
+    print(f"Populating FOCUS spec v{version} (ref={ref}, path={path})")
     base = f"{BASE}/{ref}/{path}"
 
     try:
+        print(f"Fetching index: {base}/columns.mdpp")
         cols_mdpp = fetch_text(f"{base}/columns.mdpp")
     except RuntimeError as e:
         raise RuntimeError(
@@ -201,7 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     files = parse_columns_mdpp(cols_mdpp)
 
     columns: list[Column] = []
-    for filename in files:
+    for i, filename in enumerate(files, start=1):
+        print(f"[{i}/{len(files)}] Fetching {filename}")
         md = fetch_text(f"{base}/{filename}")
         constraints = parse_constraints(md)
 
