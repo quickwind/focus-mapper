@@ -11,8 +11,15 @@ jobs:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         pandas: ["2.x", "1.5"]
+        exclude:
+          - python-version: "3.12"
+            pandas: "1.5"
+          - python-version: "3.13"
+            pandas: "1.5"
+          - python-version: "3.14"
+            pandas: "1.5"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,10 +38,9 @@ jobs:
             python -m pip install -U "pandas>=2,<3"
           fi
       - name: Test
-        if: ${{ !(matrix.pandas == '1.5' && matrix.python-version == '3.12') }}
         run: pytest
       - name: Upload coverage
-        if: ${{ env.CODECOV_TOKEN != '' && !(matrix.pandas == '1.5' && matrix.python-version == '3.12') }}
+        if: ${{ env.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
