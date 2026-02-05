@@ -44,4 +44,4 @@ jobs:
         uses: pypa/gh-action-pypi-publish@v1.10.2
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
-          verify_metadata: false
+          verify-metadata: false
