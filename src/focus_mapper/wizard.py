@@ -143,14 +143,14 @@ def _prompt_for_steps(
             if allow_cast:
                 choice = prompt(
                     "Add step: [1] map_values [2] cast [3] round [4] math "
-                    "[5] when [6] pandas_expr [7] done\n> "
+                    "[5] when [6] pandas_expr [7] done\n(Default is \"done\") > "
                 ).strip()
             else:
                 choice = prompt(
                     "Add step: [1] map_values [2] round [3] math "
-                    "[4] when [5] pandas_expr [6] done\n> "
+                    "[4] when [5] pandas_expr [6] done\n(Default is \"done\") > "
                 ).strip()
-            if choice in {"7", "done"} or (not allow_cast and choice in {"6", "done"}):
+            if not choice or choice in {"7", "done"} or (not allow_cast and choice in {"6", "done"}):
                 return steps
 
         if not has_series:
