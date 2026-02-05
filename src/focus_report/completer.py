@@ -79,6 +79,24 @@ class PathCompleter:
             return None
 
 
+class ColumnCompleter:
+    """Readline completer for column names (case-insensitive prefix match)."""
+
+    def __init__(self, columns: list[str]) -> None:
+        self.columns = columns
+
+    def __call__(self, text: str, state: int) -> str | None:
+        if state == 0:
+            needle = text.lower()
+            self.matches = sorted(
+                {c for c in self.columns if c.lower().startswith(needle)}
+            )
+        try:
+            return self.matches[state]
+        except (IndexError, AttributeError):
+            return None
+
+
 @contextmanager
 def path_completion() -> Generator[None, None, None]:
     """Context manager to enable tab-completion for file paths during input()."""
@@ -114,3 +132,29 @@ def path_completion() -> Generator[None, None, None]:
         readline.set_completer_delims(old_delims)
         if hasattr(readline, "set_completion_display_matches_hook"):
             readline.set_completion_display_matches_hook(old_display_hook)
+
+
+@contextmanager
+def column_completion(columns: list[str]) -> Generator[None, None, None]:
+    """Context manager to enable tab-completion for column names during input()."""
+    if readline is None:
+        yield
+        return
+
+    old_completer = readline.get_completer()
+    old_delims = readline.get_completer_delims()
+
+    try:
+        readline.set_completer(ColumnCompleter(columns))
+        doc = getattr(readline, "__doc__", "")
+        if doc and "libedit" in doc:
+            readline.parse_and_bind("bind ^I rl_complete")
+        else:
+            readline.parse_and_bind("tab: complete")
+
+        # Token delimiters for column names (whitespace and punctuation).
+        readline.set_completer_delims(" \t\n\"'`@$><=;|&{(")
+        yield
+    finally:
+        readline.set_completer(old_completer)
+        readline.set_completer_delims(old_delims)

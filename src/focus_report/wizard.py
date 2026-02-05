@@ -7,6 +7,7 @@ from typing import Callable
 import pandas as pd
 
 from .mapping.config import MappingConfig, MappingRule
+from .completer import column_completion
 from .spec import FocusSpec, FocusColumnSpec
 
 
@@ -208,7 +209,8 @@ def _pick_column(
 
     print("Available columns:\n" + "\n".join(f"- {c}" for c in columns) + "\n")
     while True:
-        col = prompt("Enter column name: ").strip()
+        with column_completion(columns):
+            col = prompt("Enter column name: ").strip()
         if col in columns:
             return col
 
@@ -231,7 +233,8 @@ def _pick_columns(
 
     print("Available columns:\n" + "\n".join(f"- {c}" for c in columns) + "\n")
     while True:
-        col = prompt("Add column (empty to finish): ").strip()
+        with column_completion(columns):
+            col = prompt("Add column (empty to finish): ").strip()
         if not col:
             break
         if col in columns and col not in picked:
