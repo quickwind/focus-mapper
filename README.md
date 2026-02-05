@@ -41,6 +41,41 @@ Outputs:
 - `focus.focus-metadata.json` (metadata)
 - `focus.validation.json` (validation report)
 
+## Use As A Library
+
+You can install and call `focus-report` from another Python project.
+
+Install from a local checkout:
+
+```bash
+pip install -e /path/to/focus-report
+```
+
+Example usage:
+
+```python
+from pathlib import Path
+
+import pandas as pd
+
+from focus_report.mapping.config import load_mapping_config
+from focus_report.mapping.executor import generate_focus_dataframe
+from focus_report.spec import load_focus_spec
+from focus_report.validate import validate_focus_dataframe
+
+df = pd.read_csv("input.csv")
+mapping = load_mapping_config(Path("mapping.yaml"))
+spec = load_focus_spec("v1.2")
+
+out = generate_focus_dataframe(df, mapping=mapping, spec=spec)
+report = validate_focus_dataframe(out, spec=spec, mapping=mapping)
+```
+
+Notes:
+- Parquet support requires `pyarrow` (`pip install -e ".[parquet]"`).
+- Only `v1.2` is supported right now.
+- Validation overrides require passing `mapping` to `validate_focus_dataframe`.
+
 ## Mapping Wizard
 
 Interactive wizard to create a mapping YAML based on a sample input file:
