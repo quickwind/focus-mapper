@@ -148,16 +148,16 @@ mappings:
 
 | Operation | Description | Parameters | Example |
 |-----------|-------------|------------|---------|
-| `from_column` | Load value from an input column | `column` (string) | `- op: from_column`<br>`  column: "cost"` |
-| `const` | Set a constant value for every row | `value` (any) | `- op: const`<br>`  value: "Acme"` |
-| `coalesce` | Take the first non-null value from a list of columns | `columns` (list) | `- op: coalesce`<br>`  columns: ["a", "b"]` |
-| `map_values` | Map values using a lookup dictionary | `mapping` (dict), `default` (opt), `column` (opt) | `- op: map_values`<br>`  mapping: {"U": "Usage"}` |
-| `concat` | Concatenate multiple columns into a string | `columns` (list), `sep` (string, default "") | `- op: concat`<br>`  columns: ["p", "s"]`<br>`  sep: "-"` |
-| `cast` | Convert the data type of the current value | `to` (string), `scale` (int, for decimal) | `- op: cast`<br>`  to: "decimal"`<br>`  scale: 2` |
-| `round` | Round the current numeric value | `ndigits` (int, default 0) | `- op: round`<br>`  ndigits: 2` |
-| `math` | Perform arithmetic (+, -, *, /) | `operator` (string), `operands` (list) | `- op: math`<br>`  operator: add`<br>`  operands: [{column: "tax"}]` |
-| `when` | Simple `if column == value then X else Y` logic | `column`, `value`, `then`, `else` | `- op: when`<br>`  column: "id"`<br>`  value: 0`<br>`  then: "N/A"` |
-| `pandas_expr` | Evaluate a safe pandas expression to produce a column | `expr` (string) | `- op: pandas_expr`<br>`  expr: "df['a'] + df['b']"` |
+| `from_column` | Initialize the pipeline from a source column. Use this as the first step when you want to transform an input field. | `column` (string; input column name) | `- op: from_column`<br>`  column: "cost"` |
+| `const` | Create a column with the same value for every row (including `null`). Useful for static metadata. | `value` (any) | `- op: const`<br>`  value: "Acme"` |
+| `coalesce` | Pick the first non-null value across multiple columns, left to right. | `columns` (list of strings) | `- op: coalesce`<br>`  columns: ["a", "b"]` |
+| `map_values` | Replace values using a lookup dictionary. If a value is missing, use `default` (or null if not set). Can start from `column` or the current series. | `mapping` (dict), `default` (optional), `column` (optional) | `- op: map_values`<br>`  column: "charge_category"`<br>`  mapping: {"Usage": "U", "Tax": "T"}` |
+| `concat` | Join multiple columns into a single string. Nulls are treated as empty strings. | `columns` (list), `sep` (string, default "") | `- op: concat`<br>`  columns: ["tag_a", "tag_b"]`<br>`  sep: "-"` |
+| `cast` | Convert the current series to a specific type. Use `decimal` for money and `datetime` for timestamps. | `to` (string: `string|float|int|datetime|decimal`), `scale` (int, decimal only) | `- op: cast`<br>`  to: "decimal"`<br>`  scale: 2` |
+| `round` | Round the current numeric series to `ndigits`. | `ndigits` (int, default 0) | `- op: round`<br>`  ndigits: 2` |
+| `math` | Row-wise arithmetic across columns or constants. Supports `add`, `sub`, `mul`, `div`. Use `operands` to list inputs. | `operator` (string), `operands` (list of `{column}` or `{const}`) | `- op: math`<br>`  operator: add`<br>`  operands: [{column: "cost"}, {column: "tax"}]` |
+| `when` | Conditional assignment: if `column == value` then `then`, else `else`. | `column`, `value`, `then`, `else` (optional) | `- op: when`<br>`  column: "charge_category"`<br>`  value: "Tax"`<br>`  then: "Y"`<br>`  else: "N"` |
+| `pandas_expr` | Evaluate a safe pandas expression. Use `df` for the input DataFrame, `current` for the prior series, and `pd` for pandas helpers. Must return a Series or scalar. | `expr` (string) | `- op: pandas_expr`<br>`  expr: "df['a'] + df['b']"` |
 
 ### pandas_expr Safety Notes
 
