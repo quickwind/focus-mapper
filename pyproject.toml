@@ -61,4 +61,4 @@ focus_mapper = ["specs/**/*.json"]
 where = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=focus_mapper --cov-report=term-missing --cov-report=html --cov-report=xml"
+addopts = "--cov=focus_mapper --cov-branch --cov-report=term-missing --cov-report=html --cov-report=xml"

@@ -32,8 +32,9 @@ jobs:
         if: ${{ !(matrix.pandas == '1.5' && matrix.python-version == '3.12') }}
         run: pytest
       - name: Upload coverage
-        if: ${{ !(matrix.pandas == '1.5' && matrix.python-version == '3.12') }}
+        if: ${{ secrets.CODECOV_TOKEN != '' && !(matrix.pandas == '1.5' && matrix.python-version == '3.12') }}
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage.xml
-          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
