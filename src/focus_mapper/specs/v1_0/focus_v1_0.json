@@ -474,6 +474,7 @@
       "value_format": "[Key-Value Format](#key-valueformat)"
     }
   ],
+  "metadata": {},
   "source": {
     "path": "specification/columns",
     "ref": "v1.0",

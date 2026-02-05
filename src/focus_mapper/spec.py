@@ -39,6 +39,7 @@ class FocusSpec:
     version: str
     source: dict[str, Any] | None
     columns: list[FocusColumnSpec]
+    metadata: dict[str, Any] | None = None
 
     @property
     def column_names(self) -> list[str]:
@@ -163,7 +164,12 @@ def load_focus_spec(version: str) -> FocusSpec:
             )
         )
 
-    return FocusSpec(version=raw["version"], source=raw.get("source"), columns=cols)
+    return FocusSpec(
+        version=raw["version"],
+        source=raw.get("source"),
+        columns=cols,
+        metadata=raw.get("metadata"),
+    )
 
 
 def list_available_spec_versions() -> list[str]:

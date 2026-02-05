@@ -52,6 +52,17 @@ def parse_columns_mdpp(text: str) -> list[str]:
     return files
 
 
+def parse_includes_mdpp(text: str) -> list[str]:
+    files = []
+    for line in text.splitlines():
+        line = line.strip()
+        m = re.match(r"^!INCLUDE \"([^\"]+)\",", line)
+        if not m:
+            continue
+        files.append(m.group(1))
+    return files
+
+
 def _parse_table_after_marker(md: str, marker: str) -> list[list[str]]:
     if marker not in md:
         return []
@@ -227,6 +238,19 @@ def _discover_index_path(ref: str, path_hint: str | None) -> tuple[str, str, lis
     return base_dir, "", blobs
 
 
+def _discover_metadata_path(ref: str, path_hint: str | None) -> str:
+    tree = _tree_for_ref(ref)
+    blobs = [t["path"] for t in tree.get("tree", []) if t.get("type") == "blob"]
+    candidates = [
+        p for p in blobs if p.endswith("metadata.mdpp") or p.endswith("metadata.md")
+    ]
+    if path_hint:
+        path_hint = path_hint.strip("/")
+        candidates = [p for p in candidates if path_hint in p]
+    candidates = sorted(candidates, key=lambda p: len(p))
+    return candidates[0] if candidates else ""
+
+
 def _split_column_blocks(md: str) -> list[str]:
     pattern = re.compile(r"^##### .*?Column ID\s*$", flags=re.MULTILINE)
     matches = list(pattern.finditer(md))
@@ -317,6 +341,157 @@ def _parse_columns_from_markdown(md: str) -> list[Column]:
         )
 
     return columns
+
+
+def _split_metadata_blocks(md: str) -> list[str]:
+    pattern = re.compile(r"Metadata ID\s*$", flags=re.MULTILINE | re.IGNORECASE)
+    matches = list(pattern.finditer(md))
+    if not matches:
+        return []
+    blocks: list[str] = []
+    for idx, m in enumerate(matches):
+        start = m.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(md)
+        blocks.append(md[start:end])
+    return blocks
+
+
+def _parse_metadata_entries(md: str) -> dict[str, dict[str, str]]:
+    entries: dict[str, dict[str, str]] = {}
+    blocks = _split_metadata_blocks(md)
+    for block in blocks:
+        meta_id = _extract_first_nonempty_line(block)
+        if not meta_id:
+            continue
+        constraints = _parse_constraints_from_block(block)
+        entries[meta_id] = constraints
+    return entries
+
+
+def _collect_metadata_entries(ref: str, metadata_path: str) -> dict[str, dict[str, str]]:
+    def fetch_and_parse(path: str, seen: set[str]) -> dict[str, dict[str, str]]:
+        if path in seen:
+            return {}
+        seen.add(path)
+        print(f"[metadata] Fetching {path}")
+        text = fetch_text(f"{BASE}/{ref}/{path}")
+        entries = _parse_metadata_entries(text)
+        includes = parse_includes_mdpp(text)
+        if not includes:
+            return entries
+        base_dir = path.rsplit("/", 1)[0]
+        for inc in includes:
+            child = join_repo_path(base_dir, inc)
+            entries.update(fetch_and_parse(child, seen))
+        return entries
+
+    return fetch_and_parse(metadata_path, set())
+
+
+def _build_metadata_schema(entries: dict[str, dict[str, str]]) -> dict[str, dict]:
+    def field(meta_id: str) -> dict | None:
+        constraints = entries.get(meta_id)
+        if not constraints:
+            return None
+        return {
+            "feature_level": constraints.get("Feature level"),
+            "allows_nulls": constraints.get("Allows nulls"),
+            "data_type": constraints.get("Data type"),
+            "value_format": constraints.get("Value format"),
+        }
+
+    def collect(ids: list[str]) -> dict[str, dict]:
+        out: dict[str, dict] = {}
+        for meta_id in ids:
+            entry = field(meta_id)
+            if entry:
+                out[meta_id] = entry
+        return out
+
+    data_generator_fields = collect(["DataGenerator"])
+    dataset_instance_fields = collect(
+        ["DatasetInstanceId", "DatasetInstanceName", "FocusDatasetId"]
+    )
+    schema_fields = collect(
+        [
+            "SchemaId",
+            "CreationDate",
+            "FocusVersion",
+            "DataGeneratorVersion",
+            "DatasetInstanceId",
+        ]
+    )
+    column_definition_fields = collect(
+        [
+            "ColumnName",
+            "DataType",
+            "Deprecated",
+            "NumericPrecision",
+            "NumberScale",
+            "PreviousColumnName",
+            "ProviderTagPrefixes",
+            "StringEncoding",
+            "StringMaxLength",
+        ]
+    )
+    column_definition_self = field("ColumnDefinition")
+
+    metadata: dict[str, dict] = {}
+    if data_generator_fields:
+        metadata["DataGenerator"] = data_generator_fields
+        if field("DataGenerator"):
+            metadata["DataGenerator"]["__self__"] = field("DataGenerator")
+
+    if dataset_instance_fields:
+        metadata["DatasetInstance"] = {
+            **({"__self__": field("DatasetInstance")} if field("DatasetInstance") else {}),
+            **dataset_instance_fields,
+        }
+
+    time_sector_fields = collect(
+        [
+            "TimeSectorComplete",
+            "TimeSectorLastUpdated",
+            "TimeSectorStart",
+            "TimeSectorEnd",
+        ]
+    )
+    if time_sector_fields:
+        time_sectors = {
+            **({"__self__": field("TimeSectors")} if field("TimeSectors") else {}),
+            **time_sector_fields,
+        }
+    else:
+        time_sectors = {}
+
+    recency_fields = collect(
+        [
+            "DatasetInstanceId",
+            "DatasetInstanceComplete",
+            "DatasetInstanceLastUpdated",
+            "RecencyLastUpdated",
+        ]
+    )
+    if recency_fields or time_sectors:
+        metadata["Recency"] = {
+            **({"__self__": field("Recency")} if field("Recency") else {}),
+            **recency_fields,
+        }
+        if time_sectors:
+            metadata["Recency"]["TimeSectors"] = time_sectors
+
+    if schema_fields or column_definition_fields:
+        schema_obj: dict[str, dict] = {}
+        if field("Schema"):
+            schema_obj["__self__"] = field("Schema")
+        schema_obj.update(schema_fields)
+        if column_definition_fields or column_definition_self:
+            schema_obj["ColumnDefinition"] = {
+                **({"__self__": column_definition_self} if column_definition_self else {}),
+                **column_definition_fields,
+            }
+        metadata["Schema"] = schema_obj
+    return metadata
 
 
 def _parse_allowed_values_json(val: object) -> list[str] | None:
@@ -538,6 +713,25 @@ def main(argv: list[str] | None = None) -> int:
             columns.extend(parsed)
             continue
 
+    metadata: dict[str, dict] = {}
+    try:
+        metadata_path = "specification/metadata/metadata.mdpp"
+        print(f"Fetching metadata schema: {BASE}/{ref}/{metadata_path}")
+        entries = _collect_metadata_entries(ref, metadata_path)
+        metadata = _build_metadata_schema(entries)
+    except RuntimeError:
+        try:
+            print("Metadata index not found at default path. Discovering via GitHub API...")
+            meta_path = _discover_metadata_path(ref, "specification/metadata")
+            if meta_path:
+                print(f"Discovered metadata schema: {meta_path}")
+                entries = _collect_metadata_entries(ref, meta_path)
+                metadata = _build_metadata_schema(entries)
+            else:
+                print("No metadata schema found in repo.")
+        except RuntimeError as e:
+            print(f"Metadata schema not found or unreadable: {e}")
+
     if not columns:
         raise RuntimeError(
             "No columns parsed. The spec structure may have changed. "
@@ -551,6 +745,7 @@ def main(argv: list[str] | None = None) -> int:
             "ref": ref,
             "path": path,
         },
+        "metadata": metadata,
         "columns": [
             {
                 "name": c.name,

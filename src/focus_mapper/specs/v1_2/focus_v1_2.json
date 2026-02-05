@@ -528,88 +528,25 @@
     },
     {
       "allowed_values": [
-        "AI Platforms",
-        "Bots",
-        "Generative AI",
-        "Machine Learning",
-        "Natural Language Processing",
-        "Other (AI and Machine Learning)",
-        "Analytics Platforms",
-        "Business Intelligence",
-        "Data Processing",
-        "Search",
-        "Streaming Analytics",
-        "Other (Analytics)",
-        "Productivity and Collaboration",
-        "Other (Business Applications)",
-        "Containers",
-        "End User Computing",
-        "Quantum Compute",
-        "Serverless Compute",
-        "Virtual Machines",
-        "Other (Compute)",
-        "Caching",
-        "Data Warehouses",
-        "Ledger Databases",
-        "NoSQL Databases",
-        "Relational Databases",
-        "Time Series Databases",
-        "Other (Databases)",
-        "Developer Platforms",
-        "Continuous Integration and Deployment",
-        "Development Environments",
-        "Source Code Management",
-        "Quality Assurance",
-        "Other (Developer Tools)",
-        "Identity and Access Management",
-        "Other (Identity)",
-        "API Management",
-        "Messaging",
-        "Workflow Orchestration",
-        "Other (Integration)",
-        "IoT Analytics",
-        "IoT Platforms",
-        "Other (Internet of Things)",
-        "Architecture",
-        "Compliance",
-        "Cost Management",
-        "Data Governance",
-        "Disaster Recovery",
-        "Endpoint Management",
-        "Observability",
-        "Support",
-        "Other (Management and Governance)",
-        "Content Creation",
-        "Gaming",
-        "Media Streaming",
-        "Mixed Reality",
-        "Other (Media)",
-        "Data Migration",
-        "Resource Migration",
-        "Other (Migration)",
-        "Other (Mobile)",
-        "Multicloud Integration",
-        "Other (Multicloud)",
-        "Application Networking",
-        "Content Delivery",
-        "Network Connectivity",
-        "Network Infrastructure",
-        "Network Routing",
-        "Network Security",
-        "Other (Networking)",
-        "Secret Management",
-        "Security Posture Management",
-        "Threat Detection and Response",
-        "Other (Security)",
-        "Backup Storage",
-        "Block Storage",
-        "File Storage",
-        "Object Storage",
-        "Storage Platforms",
-        "Other (Storage)",
-        "Application Platforms",
-        "Other (Web)",
-        "Other (Other)"
+        "AI and Machine Learning",
+        "Analytics",
+        "Business Applications",
+        "Compute",
+        "Databases",
+        "Developer Tools",
+        "Identity",
+        "Integration",
+        "Internet of Things",
+        "Management and Governance",
+        "Media",
+        "Migration",
+        "Mobile",
+        "Multicloud",
+        "Networking",
+        "Security",
+        "Storage",
+        "Web",
+        "Other"
       ],
       "allows_nulls": false,
       "data_type": "String",
@@ -700,6 +637,104 @@
       "value_format": "[Key-Value Format](#key-valueformat)"
     }
   ],
+  "metadata": {
+    "DataGenerator": {
+      "DataGenerator": {
+        "allows_nulls": "False",
+        "data_type": "String",
+        "feature_level": "Mandatory",
+        "value_format": "\\<not specified>"
+      },
+      "__self__": {
+        "allows_nulls": "False",
+        "data_type": "String",
+        "feature_level": "Mandatory",
+        "value_format": "\\<not specified>"
+      }
+    },
+    "Schema": {
+      "ColumnDefinition": {
+        "ColumnName": {
+          "allows_nulls": "False",
+          "data_type": "String",
+          "feature_level": "Mandatory",
+          "value_format": "\\<not specified>"
+        },
+        "DataType": {
+          "allows_nulls": "False",
+          "data_type": "String",
+          "feature_level": "Mandatory",
+          "value_format": "\\<not specified>"
+        },
+        "Deprecated": {
+          "allows_nulls": "False",
+          "data_type": "Boolean",
+          "feature_level": "Conditional",
+          "value_format": "\\<not specified>"
+        },
+        "NumberScale": {
+          "allows_nulls": "False",
+          "data_type": "Integer",
+          "feature_level": "Conditional",
+          "value_format": "[Numeric Format](#numericformat)"
+        },
+        "NumericPrecision": {
+          "allows_nulls": "False",
+          "data_type": "Integer",
+          "feature_level": "Conditional",
+          "value_format": "[Numeric Format](#numericformat)"
+        },
+        "PreviousColumnName": {
+          "allows_nulls": "False",
+          "data_type": "String",
+          "feature_level": "Conditional",
+          "value_format": "\\<not specified>"
+        },
+        "ProviderTagPrefixes": {
+          "allows_nulls": "False",
+          "data_type": "Array",
+          "feature_level": "Conditional",
+          "value_format": "STRING datatype values in the array"
+        },
+        "StringEncoding": {
+          "allows_nulls": "False",
+          "data_type": "String",
+          "feature_level": "Conditional",
+          "value_format": "\\<not specified>"
+        },
+        "StringMaxLength": {
+          "allows_nulls": "False",
+          "data_type": "Integer",
+          "feature_level": "Conditional",
+          "value_format": "[Numeric Format](#numericformat)"
+        }
+      },
+      "CreationDate": {
+        "allows_nulls": "False",
+        "data_type": "Date/Time",
+        "feature_level": "Mandatory",
+        "value_format": "[Date/Time Format](#date/timeformat)"
+      },
+      "DataGeneratorVersion": {
+        "allows_nulls": "False",
+        "data_type": "STRING",
+        "feature_level": "Optional",
+        "value_format": "\\<not specified>"
+      },
+      "FocusVersion": {
+        "allows_nulls": "False",
+        "data_type": "STRING",
+        "feature_level": "Mandatory",
+        "value_format": "Must align with a published FocusVersion"
+      },
+      "SchemaId": {
+        "allows_nulls": "False",
+        "data_type": "STRING",
+        "feature_level": "Mandatory",
+        "value_format": "Recommend GUID String"
+      }
+    }
+  },
   "source": {
     "path": "specification/columns",
     "ref": "v1.2",

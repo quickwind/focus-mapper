@@ -24,15 +24,16 @@ class SidecarMetadata:
     output_path: str
 
     def to_dict(self) -> dict:
+        schema = {
+            "SchemaId": self.schema_id,
+            "FocusVersion": self.spec_version,
+            "CreationDate": self.generated_at,
+            "DataGeneratorVersion": self.generator_version,
+            "ColumnDefinition": self.column_definitions,
+        }
         return {
             "DataGenerator": {"DataGenerator": self.generator_name},
-            "Schema": {
-                "SchemaId": self.schema_id,
-                "FocusVersion": self.spec_version,
-                "CreationDate": self.generated_at,
-                "DataGeneratorVersion": self.generator_version,
-                "ColumnDefinition": self.column_definitions,
-            },
+            "Schema": schema,
         }
 
     def parquet_kv_metadata(self) -> dict[bytes, bytes]:
