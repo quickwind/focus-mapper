@@ -62,14 +62,22 @@ class PathCompleter:
             try:
                 matches = glob.glob(pattern)
                 results = []
+                if os.name == "nt":
+                    slash_idx = max(
+                        full_path_prefix.rfind("/"),
+                        full_path_prefix.rfind("\\"),
+                    )
+                    dir_prefix = full_path_prefix[: slash_idx + 1] if slash_idx >= 0 else ""
                 for m in matches:
-                    # Since slashes are delimiters, readline expects us to return
-                    # ONLY the part that completes the current token 'text'.
-                    # This ensures the completion list (hints) only shows basenames.
                     name = os.path.basename(m.rstrip(os.sep))
                     if os.path.isdir(m):
                         name += os.sep
-                    results.append(name)
+                    if os.name == "nt":
+                        # On Windows, the entire path is one token; return full completion.
+                        results.append(f"{dir_prefix}{name}")
+                    else:
+                        # On Unix, return only the basename for the current token.
+                        results.append(name)
 
                 self.matches = sorted(list(set(results)))
             except Exception:
