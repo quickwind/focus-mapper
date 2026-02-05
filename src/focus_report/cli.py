@@ -135,9 +135,9 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         mapping=mapping,
         generator_name=getattr(args, "data_generator", "focus-report"),
         generator_version=getattr(args, "data_generator_version", __version__),
-        validation=validation,
         input_path=input_path,
         output_path=output_path,
+        output_df=out_df,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

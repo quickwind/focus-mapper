@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import hashlib
 import json
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
+
 from .mapping.config import MappingConfig
 from .spec import FocusSpec
-from .validate import ValidationReport
 
 
 @dataclass(frozen=True)
@@ -17,59 +18,31 @@ class SidecarMetadata:
     generated_at: str
     generator_name: str
     generator_version: str
-    mapping_hash: str
-    spec_source: dict | None
-    mapping_targets: list[str]
-    standard_columns: list[str]
-    extension_columns: list[str]
-    extension_definitions: dict[str, dict]
-    validation_summary: dict[str, int]
+    schema_id: str
+    column_definitions: list[dict]
     input_path: str
     output_path: str
 
     def to_dict(self) -> dict:
         return {
-            "FocusVersion": self.spec_version,
-            "CreationDate": self.generated_at,
-            "DataGeneratorName": self.generator_name,
-            "DataGeneratorVersion": self.generator_version,
-            "MappingHash": self.mapping_hash,
-            "InputFile": self.input_path,
-            "OutputFile": self.output_path,
-            "ValidationSummary": self.validation_summary,
-            "Columns": self._get_column_metadata(),
+            "DataGenerator": {"DataGenerator": self.generator_name},
+            "Schema": {
+                "SchemaId": self.schema_id,
+                "FocusVersion": self.spec_version,
+                "CreationDate": self.generated_at,
+                "DataGeneratorVersion": self.generator_version,
+                "ColumnDefinition": self.column_definitions,
+            },
         }
-
-    def _get_column_metadata(self) -> list[dict]:
-        cols = []
-        for c in self.standard_columns:
-            cols.append({"ColumnName": c, "IsExtension": False})
-        for c in self.extension_columns:
-            meta = {"ColumnName": c, "IsExtension": True}
-            if c in self.extension_definitions:
-                meta.update(self.extension_definitions[c])
-            cols.append(meta)
-        return cols
 
     def parquet_kv_metadata(self) -> dict[bytes, bytes]:
         # Keep values short; Parquet metadata is key/value bytes.
-        spec_ref = None
-        if isinstance(self.spec_source, dict):
-            repo = self.spec_source.get("repo")
-            ref = self.spec_source.get("ref")
-            path = self.spec_source.get("path")
-            if isinstance(repo, str) and isinstance(ref, str):
-                spec_ref = f"{repo}@{ref}" + (
-                    f":{path}" if isinstance(path, str) else ""
-                )
-
         return {
+            b"SchemaId": self.schema_id.encode("utf-8"),
             b"FocusVersion": self.spec_version.encode("utf-8"),
             b"CreationDate": self.generated_at.encode("utf-8"),
-            b"DataGeneratorName": self.generator_name.encode("utf-8"),
+            b"DataGenerator": self.generator_name.encode("utf-8"),
             b"DataGeneratorVersion": self.generator_version.encode("utf-8"),
-            b"MappingHash": self.mapping_hash.encode("utf-8"),
-            **({b"FocusSpecRef": spec_ref.encode("utf-8")} if spec_ref else {}),
         }
 
 
@@ -79,33 +52,31 @@ def build_sidecar_metadata(
     mapping: MappingConfig,
     generator_name: str,
     generator_version: str,
-    validation: ValidationReport,
     input_path: Path,
     output_path: Path,
+    output_df: pd.DataFrame,
+    provider_tag_prefixes: list[str] | None = None,
 ) -> SidecarMetadata:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    mapping_hash = _sha256_text(mapping_yaml_canonical(mapping))
-
-    extension_definitions: dict[str, dict] = {}
-    for rule in mapping.rules:
-        if rule.target.startswith("x_") and rule.description:
-            extension_definitions[rule.target] = {"description": rule.description}
+    schema_id = _schema_id(
+        spec=spec,
+        mapping=mapping,
+        generator_version=generator_version,
+        columns=list(output_df.columns),
+    )
+    column_definitions = _build_column_definitions(
+        output_df=output_df,
+        spec=spec,
+        provider_tag_prefixes=provider_tag_prefixes or [],
+    )
 
     return SidecarMetadata(
         spec_version=spec.version,
         generated_at=now,
         generator_name=generator_name,
         generator_version=generator_version,
-        mapping_hash=mapping_hash,
-        spec_source=spec.source,
-        mapping_targets=[r.target for r in mapping.rules],
-        standard_columns=spec.column_names,
-        extension_columns=mapping.extension_targets,
-        extension_definitions=extension_definitions,
-        validation_summary={
-            "errors": validation.summary.errors,
-            "warnings": validation.summary.warnings,
-        },
+        schema_id=schema_id,
+        column_definitions=column_definitions,
         input_path=str(input_path),
         output_path=str(output_path),
     )
@@ -117,8 +88,83 @@ def write_sidecar_metadata(meta: SidecarMetadata, path: Path) -> None:
     )
 
 
-def _sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+def _schema_id(
+    *,
+    spec: FocusSpec,
+    mapping: MappingConfig,
+    generator_version: str,
+    columns: list[str],
+) -> str:
+    seed = "|".join(
+        [
+            spec.version,
+            generator_version,
+            mapping_yaml_canonical(mapping),
+            ",".join(columns),
+        ]
+    )
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, seed))
+
+
+def _build_column_definitions(
+    *,
+    output_df: pd.DataFrame,
+    spec: FocusSpec,
+    provider_tag_prefixes: list[str],
+) -> list[dict]:
+    out: list[dict] = []
+    spec_by_name = {c.name: c for c in spec.columns}
+
+    for col in output_df.columns:
+        meta: dict = {"ColumnName": col}
+        if col in spec_by_name:
+            spec_col = spec_by_name[col]
+            meta["DataType"] = _spec_type_to_metadata(spec_col.data_type)
+            if spec_col.numeric_precision is not None:
+                meta["NumericPrecision"] = int(spec_col.numeric_precision)
+            if spec_col.numeric_scale is not None:
+                meta["NumberScale"] = int(spec_col.numeric_scale)
+            if col == "Tags":
+                meta["ProviderTagPrefixes"] = list(provider_tag_prefixes)
+        else:
+            meta["DataType"] = _infer_extension_type(output_df[col])
+        out.append(meta)
+
+    return out
+
+
+def _spec_type_to_metadata(data_type: str) -> str:
+    t = data_type.strip().lower()
+    if t == "string":
+        return "STRING"
+    if t == "date/time":
+        return "DATETIME"
+    if t == "decimal":
+        return "DECIMAL"
+    if t == "json":
+        return "JSON"
+    return "STRING"
+
+
+def _infer_extension_type(series: pd.Series) -> str:
+    from pandas.api.types import (
+        is_bool_dtype,
+        is_datetime64_any_dtype,
+        is_float_dtype,
+        is_integer_dtype,
+    )
+
+    if is_datetime64_any_dtype(series):
+        return "DATETIME"
+    if is_integer_dtype(series) or is_float_dtype(series):
+        return "DECIMAL"
+    if is_bool_dtype(series):
+        return "STRING"
+    if series.dtype == "object":
+        sample = next((v for v in series if v is not None and v is not pd.NA), None)
+        if isinstance(sample, dict):
+            return "JSON"
+    return "STRING"
 
 
 def mapping_yaml_canonical(mapping: MappingConfig) -> str:

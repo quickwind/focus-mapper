@@ -147,7 +147,13 @@ def validate_focus_dataframe(df: pd.DataFrame, *, spec: FocusSpec) -> Validation
         if dtype == "date/time":
             _validate_datetime(findings, s, col.name)
         elif dtype == "decimal":
-            _validate_decimal(findings, s, col.name)
+            _validate_decimal(
+                findings,
+                s,
+                col.name,
+                precision=col.numeric_precision,
+                scale=col.numeric_scale,
+            )
         elif dtype == "json":
             _validate_json_object(findings, s, col.name)
 
@@ -218,7 +224,15 @@ def _validate_datetime(
     """Checks if a column contains valid ISO8601/parseable dates."""
     if pd.api.types.is_datetime64_any_dtype(s.dtype):
         return
-    parsed = pd.to_datetime(s, utc=True, errors="coerce")
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Could not infer format.*",
+            category=UserWarning,
+        )
+        parsed = pd.to_datetime(s, utc=True, errors="coerce")
     mask = (~s.isna()) & (pd.isna(parsed))
     failing = int(mask.sum())
     if failing:
@@ -235,22 +249,45 @@ def _validate_datetime(
 
 
 def _validate_decimal(
-    findings: list[ValidationFinding], s: pd.Series, col: str
+    findings: list[ValidationFinding],
+    s: pd.Series,
+    col: str,
+    *,
+    precision: int | None,
+    scale: int | None,
 ) -> None:
     """Checks if a column contains valid decimal-compatible values."""
 
-    def ok(v: Any) -> bool:
+    def to_decimal(v: Any) -> Decimal | None:
         if v is None or v is pd.NA or (isinstance(v, float) and pd.isna(v)):
-            return True
+            return None
         if isinstance(v, Decimal):
-            return True
+            return v
         try:
-            Decimal(str(v))
-            return True
+            return Decimal(str(v))
         except (InvalidOperation, ValueError):
-            return False
+            return None
 
-    mask = ~s.map(ok)
+    def within_limits(d: Decimal) -> bool:
+        tup = d.as_tuple()
+        digits = len(tup.digits)
+        exp = tup.exponent
+        if exp >= 0:
+            actual_scale = 0
+            actual_precision = digits + exp
+        else:
+            actual_scale = -exp
+            actual_precision = digits
+
+        if precision is not None and actual_precision > precision:
+            return False
+        if scale is not None and actual_scale > scale:
+            return False
+        return True
+
+    parsed = s.map(to_decimal)
+    parse_fail = parsed.isna() & ~s.isna()
+    mask = parse_fail
     failing = int(mask.sum())
     if failing:
         findings.append(
@@ -261,6 +298,23 @@ def _validate_decimal(
                 column=col,
                 failing_rows=failing,
                 sample_values=_sample_values(s[mask]),
+            )
+        )
+
+    if precision is None and scale is None:
+        return
+
+    limit_mask = parsed.map(lambda d: True if d is None else within_limits(d)) == False  # noqa: E712
+    failing_limits = int(limit_mask.sum())
+    if failing_limits:
+        findings.append(
+            ValidationFinding(
+                check_id="focus.decimal_precision_scale",
+                severity="ERROR",
+                message="Decimal column exceeds defined precision/scale limits",
+                column=col,
+                failing_rows=failing_limits,
+                sample_values=_sample_values(s[limit_mask]),
             )
         )
 
