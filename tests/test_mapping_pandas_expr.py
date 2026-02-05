@@ -2,8 +2,8 @@ import pandas as pd
 
 import pytest
 
-from focus_report.mapping.ops import apply_steps
-from focus_report.errors import MappingExecutionError
+from focus_mapper.mapping.ops import apply_steps
+from focus_mapper.errors import MappingExecutionError
 
 
 def test_pandas_expr_basic_math() -> None:

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from focus_report.spec import load_focus_spec
-from focus_report.wizard import run_wizard
+from focus_mapper.spec import load_focus_spec
+from focus_mapper.wizard import run_wizard
 
 
 def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:

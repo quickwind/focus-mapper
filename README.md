@@ -1,8 +1,8 @@
-# focus-report
+# focus-mapper
 
-Generate FinOps FOCUS v1.2 compliant reports from a pre-flattened telemetry/billing table.
+Generate FinOps FOCUS compliant reports from a pre-flattened telemetry/billing table.
 
-This project takes any tabular data (CSV/Parquet) and converts it to a FOCUS v1.2 report using a YAML mapping. Use the interactive wizard to build the mapping, or hand‑author it.
+This project takes any tabular data (CSV/Parquet) and converts it to a FOCUS compliant report using a YAML mapping. Use the interactive wizard to build the mapping, or hand‑author it.
 
 ## Quickstart
 
@@ -13,13 +13,17 @@ source .venv/bin/activate
 pip install -U pip
 pip install -e ".[dev]"
 
-python -m focus_report --help
+python -m focus_mapper --help
 pytest -q
 ```
 
 ## Supported Spec Versions
 
-Default spec version is `v1.2`. Other versions can be added by vendoring the spec:
+Default spec version is `v1.2`. The CLI and wizard will detect any versions available under `src/focus_mapper/specs`.
+
+## Populate Spec Versions
+
+Use the tool below to download and store a specific spec version from the upstream repository:
 
 ```bash
 python tools/populate_focus_spec.py --version 1.0
@@ -34,7 +38,7 @@ If a version tag doesn’t exist, override the git ref:
 python tools/populate_focus_spec.py --version 1.3 --ref main
 ```
 
-Then use `--spec v1.0` (or `v1.1`, `v1.3`) in the CLI. The CLIs will also show available versions detected under `src/focus_report/specs`.
+Then use `--spec v1.0` (or `v1.1`, `v1.3`) in the CLI.
 
 ## What You Need
 
@@ -46,7 +50,7 @@ If you don’t have a mapping yet, start with the wizard.
 ## Generate
 
 ```bash
-python -m focus_report generate \
+python -m focus_mapper generate \
   --spec v1.2 \
   --input telemetry.csv \
   --mapping mapping.yaml \
@@ -62,12 +66,12 @@ Outputs:
 
 ## Use As A Library
 
-You can install and call `focus-report` from another Python project.
+You can install and call `focus-mapper` from another Python project.
 
 Install from a local checkout:
 
 ```bash
-pip install -e /path/to/focus-report
+pip install -e /path/to/focus-mapper
 ```
 
 Example usage:
@@ -77,10 +81,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from focus_report.mapping.config import load_mapping_config
-from focus_report.mapping.executor import generate_focus_dataframe
-from focus_report.spec import load_focus_spec
-from focus_report.validate import validate_focus_dataframe
+from focus_mapper.mapping.config import load_mapping_config
+from focus_mapper.mapping.executor import generate_focus_dataframe
+from focus_mapper.spec import load_focus_spec
+from focus_mapper.validate import validate_focus_dataframe
 
 df = pd.read_csv("input.csv")
 mapping = load_mapping_config(Path("mapping.yaml"))
@@ -100,7 +104,7 @@ Notes:
 Interactive wizard to create a mapping YAML based on a sample input file:
 
 ```bash
-focus-report-wizard \
+focus-mapper-wizard \
   --spec v1.2 \
   --input telemetry.csv \
   --output mapping.yaml
@@ -109,7 +113,7 @@ focus-report-wizard \
 You can also run the wizard with no arguments and it will prompt for values:
 
 ```bash
-focus-report-wizard
+focus-mapper-wizard
 ```
 
 Optional flags:
@@ -318,7 +322,7 @@ mappings:
 - No builtins, no private/dunder attribute access
 - Only a safe allowlist of pandas methods is permitted
 
-If you need more pandas methods, add them to the allowlist in `src/focus_report/mapping/ops.py`.
+If you need more pandas methods, add them to the allowlist in `src/focus_mapper/mapping/ops.py`.
 
 ### Extension Columns
 Custom columns MUST start with the `x_` prefix. They will be appended to the output dataset and documented in the generated metadata if a `description` is provided.
@@ -329,7 +333,7 @@ If you skip a column in the wizard, it will not be mapped and will remain null i
 ## Validate
 
 ```bash
-python -m focus_report validate \
+python -m focus_mapper validate \
   --spec v1.2 \
   --input focus.csv \
   --out focus.validation.json

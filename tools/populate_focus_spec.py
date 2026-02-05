@@ -159,7 +159,7 @@ def parse_allowed_values(
 
 def _dest_dir(version: str) -> Path:
     normalized = version.lower().removeprefix("v").replace(".", "_")
-    return Path(f"src/focus_report/specs/v{normalized}")
+    return Path(f"src/focus_mapper/specs/v{normalized}")
 
 
 def _dest_file(version: str) -> Path:

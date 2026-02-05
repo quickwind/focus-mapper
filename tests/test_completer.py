@@ -1,6 +1,6 @@
 import os
 import readline
-from focus_report.completer import PathCompleter
+from focus_mapper.completer import PathCompleter
 
 
 def test_path_completer_lists_files(tmp_path, monkeypatch):

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pandas as pd
 
-from focus_report.mapping.config import MappingConfig, MappingRule
-from focus_report.spec import load_focus_spec
-from focus_report.validate import validate_focus_dataframe
+from focus_mapper.mapping.config import MappingConfig, MappingRule
+from focus_mapper.spec import load_focus_spec
+from focus_mapper.validate import validate_focus_dataframe
 
 
 def test_validation_defaults_permissive_datetime() -> None:

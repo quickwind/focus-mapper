@@ -13,7 +13,7 @@ from .mapping.config import MappingConfig
 from .spec import load_focus_spec, list_available_spec_versions
 from .wizard import run_wizard
 
-logger = logging.getLogger("focus_report.wizard")
+logger = logging.getLogger("focus_mapper.wizard")
 
 
 def _path(p: str) -> Path:
@@ -34,7 +34,7 @@ def _setup_logging(level_name: str) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="focus_report_wizard")
+    p = argparse.ArgumentParser(prog="focus-mapper-wizard")
     p.add_argument(
         "--log-level",
         default="INFO",

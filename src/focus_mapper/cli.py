@@ -16,7 +16,7 @@ from .metadata import build_sidecar_metadata, write_sidecar_metadata
 from .spec import load_focus_spec, list_available_spec_versions
 from .validate import validate_focus_dataframe, write_validation_report
 
-logger = logging.getLogger("focus_report")
+logger = logging.getLogger("focus_mapper")
 
 
 def _path(p: str) -> Path:
@@ -41,8 +41,8 @@ def _setup_logging(level_name: str) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="focus_report")
-    p.add_argument("--version", action="version", version=f"focus-report {__version__}")
+    p = argparse.ArgumentParser(prog="focus-mapper")
+    p.add_argument("--version", action="version", version=f"focus-mapper {__version__}")
     p.add_argument(
         "--log-level",
         default="INFO",
@@ -68,7 +68,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Validation report JSON output path (default: <output>.validation.json)",
     )
     gen.add_argument(
-        "--data-generator", default="focus-report", help="Data generator name"
+        "--data-generator", default="focus-mapper", help="Data generator name"
     )
     gen.add_argument(
         "--data-generator-version", default=__version__, help="Data generator version"
@@ -141,7 +141,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     sidecar = build_sidecar_metadata(
         spec=spec,
         mapping=mapping,
-        generator_name=getattr(args, "data_generator", "focus-report"),
+        generator_name=getattr(args, "data_generator", "focus-mapper"),
         generator_version=getattr(args, "data_generator_version", __version__),
         input_path=input_path,
         output_path=output_path,

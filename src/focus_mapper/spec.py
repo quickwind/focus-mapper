@@ -133,7 +133,7 @@ def load_focus_spec(version: str) -> FocusSpec:
     mod = normalized.replace(".", "_")
 
     try:
-        pkg = f"focus_report.specs.v{mod}"
+        pkg = f"focus_mapper.specs.v{mod}"
         with (
             resources.files(pkg)
             .joinpath(f"focus_v{mod}.json")
@@ -142,7 +142,7 @@ def load_focus_spec(version: str) -> FocusSpec:
             raw = json.load(f)
     except FileNotFoundError as e:
         raise SpecError(
-            "Missing embedded spec artifact. Run tools/vendor_focus_v1_2.py "
+            "Missing embedded spec artifact. Run tools/populate_focus_spec.py "
             f"--version {normalized} to generate focus_v{mod}.json."
         ) from e
     except ModuleNotFoundError as e:

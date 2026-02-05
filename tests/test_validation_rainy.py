@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from focus_report.spec import FocusColumnSpec, FocusSpec, load_focus_spec
-from focus_report.validate import validate_focus_dataframe
+from focus_mapper.spec import FocusColumnSpec, FocusSpec, load_focus_spec
+from focus_mapper.validate import validate_focus_dataframe
 
 
 def _has_finding(report, check_id: str, column: str | None = None) -> bool:

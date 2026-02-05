@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pandas as pd
 
-from focus_report.mapping.ops import apply_steps
+from focus_mapper.mapping.ops import apply_steps
 
 
 def test_cast_decimal_precision_enforced() -> None:

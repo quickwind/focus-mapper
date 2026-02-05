@@ -1,9 +1,9 @@
 import pandas as pd
 
-from focus_report.mapping.config import load_mapping_config
-from focus_report.mapping.executor import generate_focus_dataframe
-from focus_report.spec import load_focus_spec
-from focus_report.validate import validate_focus_dataframe
+from focus_mapper.mapping.config import load_mapping_config
+from focus_mapper.mapping.executor import generate_focus_dataframe
+from focus_mapper.spec import load_focus_spec
+from focus_mapper.validate import validate_focus_dataframe
 
 
 def test_generate_and_validate_focus_dataset_from_fixtures() -> None:

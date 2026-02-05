@@ -18,7 +18,7 @@ def test_cli_generate_writes_outputs(tmp_path: Path) -> None:
     cmd = [
         sys.executable,
         "-m",
-        "focus_report",
+        "focus_mapper",
         "generate",
         "--spec",
         "v1.2",
@@ -50,7 +50,7 @@ def test_cli_validate_exit_code_on_errors(tmp_path: Path) -> None:
     cmd = [
         sys.executable,
         "-m",
-        "focus_report",
+        "focus_mapper",
         "validate",
         "--spec",
         "v1.2",
@@ -83,7 +83,7 @@ def test_cli_generate_parquet_embeds_metadata(tmp_path: Path) -> None:
     cmd = [
         sys.executable,
         "-m",
-        "focus_report",
+        "focus_mapper",
         "generate",
         "--spec",
         "v1.2",
@@ -105,7 +105,7 @@ def test_cli_generate_parquet_embeds_metadata(tmp_path: Path) -> None:
 def test_wizard_cli_prompts_for_missing_args(tmp_path: Path, monkeypatch) -> None:
     out = tmp_path / "mapping.yaml"
 
-    from focus_report.spec import load_focus_spec
+    from focus_mapper.spec import load_focus_spec
 
     spec = load_focus_spec("v1.2")
     mandatory_count = len(
@@ -139,7 +139,7 @@ def test_wizard_cli_prompts_for_missing_args(tmp_path: Path, monkeypatch) -> Non
 
     monkeypatch.setattr("builtins.input", fake_input)
 
-    from focus_report.wizard_cli import main
+    from focus_mapper.wizard_cli import main
 
     rc = main([])
     assert rc == 0
@@ -160,7 +160,7 @@ def test_cli_generate_interactive(tmp_path: Path, monkeypatch) -> None:
     )
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    from focus_report.cli import main
+    from focus_mapper.cli import main
 
     rc = main([])
     assert rc == 0
@@ -178,7 +178,7 @@ def test_cli_validate_interactive(tmp_path: Path, monkeypatch) -> None:
     cmd = [
         sys.executable,
         "-m",
-        "focus_report",
+        "focus_mapper",
         "generate",
         "--spec",
         "v1.2",
@@ -194,7 +194,7 @@ def test_cli_validate_interactive(tmp_path: Path, monkeypatch) -> None:
     inputs = iter(["2", "v1.2", str(out_csv)])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-    from focus_report.cli import main
+    from focus_mapper.cli import main
 
     rc = main([])
     assert rc == 0
