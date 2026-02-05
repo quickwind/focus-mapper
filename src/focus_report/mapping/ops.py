@@ -380,9 +380,9 @@ def apply_steps(
                     f"when requires 'column' for target {target}"
                 )
             src = df[col] if col in df.columns else pd.Series([pd.NA] * len(df))
-            series = src.where(src != value, other=then_value)
-            assert series is not None
-            series = series.fillna(else_value)
+            mask = src == value
+            series = pd.Series([else_value] * len(df))
+            series = series.where(~mask, other=then_value)
             continue
 
         if op == "pandas_expr":

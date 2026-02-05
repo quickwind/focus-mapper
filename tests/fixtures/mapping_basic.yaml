@@ -155,3 +155,52 @@ mappings:
     steps:
       - op: const
         value: "CC-123"
+
+  x_CoalescedDescription:
+    description: "Coalesce alt_description then charge_description"
+    steps:
+      - op: coalesce
+        columns: ["alt_description", "charge_description"]
+
+  x_MappedCategory:
+    description: "Map charge_category to short code"
+    steps:
+      - op: map_values
+        column: charge_category
+        mapping:
+          Usage: "U"
+          Tax: "T"
+        default: "Other"
+
+  x_TagConcat:
+    description: "Concat tag_a and tag_b"
+    steps:
+      - op: concat
+        columns: ["tag_a", "tag_b"]
+        sep: "-"
+
+  x_RoundedTax:
+    description: "Rounded tax amount"
+    steps:
+      - op: from_column
+        column: tax_amount
+      - op: round
+        ndigits: 0
+
+  x_MathTotal:
+    description: "Total cost using math op"
+    steps:
+      - op: math
+        operator: add
+        operands:
+          - column: billed_cost
+          - column: tax_amount
+
+  x_WhenTax:
+    description: "Flag rows that are tax"
+    steps:
+      - op: when
+        column: charge_category
+        value: "Tax"
+        then: "Y"
+        else: "N"
