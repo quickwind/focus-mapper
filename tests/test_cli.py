@@ -119,6 +119,7 @@ def test_wizard_cli_prompts_for_missing_args(tmp_path: Path, monkeypatch) -> Non
         "n",
         "n",
         "n",
+        "",  # use default validation settings
     ]
     for _ in range(mandatory_count):
         inputs_list.extend(["", "11"])

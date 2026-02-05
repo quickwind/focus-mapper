@@ -123,7 +123,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     logger.info("Generation complete. Rows: %d", len(out_df))
 
     logger.info("Running compliance validation...")
-    validation = validate_focus_dataframe(out_df, spec=spec)
+    validation = validate_focus_dataframe(out_df, spec=spec, mapping=mapping)
     logger.info(
         "Validation finished with %d errors and %d warnings",
         validation.summary.errors,

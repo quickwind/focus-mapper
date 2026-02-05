@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -32,6 +34,8 @@ def run_wizard(
     columns = list(input_df.columns)
     normalized = {_norm(c): c for c in columns}
 
+    default_validation = _prompt_validation_defaults(prompt=prompt)
+
     targets = _select_targets(
         spec,
         include_optional=include_optional,
@@ -46,14 +50,30 @@ def run_wizard(
             target=target, columns=columns, suggested=suggested, prompt=prompt
         )
         if steps:
-            rules.append(MappingRule(target=target.name, steps=steps, description=None))
+            validation = _prompt_column_validation(
+                target_name=target.name,
+                data_type=target.data_type,
+                prompt=prompt,
+            )
+            rules.append(
+                MappingRule(
+                    target=target.name,
+                    steps=steps,
+                    description=None,
+                    validation=validation,
+                )
+            )
 
     # Extension columns
     ext_rules = _prompt_extension_columns(columns=columns, prompt=prompt)
     rules.extend(ext_rules)
 
     return WizardResult(
-        mapping=MappingConfig(spec_version=f"v{spec.version}", rules=rules),
+        mapping=MappingConfig(
+            spec_version=f"v{spec.version}",
+            rules=rules,
+            validation_defaults=default_validation,
+        ),
         selected_targets=targets,
     )
 
@@ -190,11 +210,17 @@ def _prompt_extension_columns(
             continue
         desc = prompt("Description (optional): ").strip() or None
         col = _pick_column(columns, prompt=prompt, suggested=None)
+        validation = _prompt_column_validation(
+            target_name=name,
+            data_type=None,
+            prompt=prompt,
+        )
         rules.append(
             MappingRule(
                 target=name,
                 steps=[{"op": "from_column", "column": col}],
                 description=desc,
+                validation=validation,
             )
         )
 
@@ -251,6 +277,266 @@ def _suggest_column(target: str, normalized: dict[str, str]) -> str | None:
         if n.replace("_", "") == alt:
             return original
     return None
+
+
+def _prompt_validation_defaults(*, prompt: PromptFunc) -> dict:
+    defaults = _default_validation_settings()
+    summary = (
+        "Default validation settings:\n"
+        "- mode: permissive\n"
+        "- datetime: infer format\n"
+        "- decimal: no precision/scale limits\n"
+        "- string: no length limits, trim=true, allow_empty=true\n"
+        "- json: allow any JSON type\n"
+        "- allowed values: case-sensitive\n"
+        "- nullable: follow spec\n"
+    )
+    print(summary)
+    use = prompt("Use these defaults? [Y/n] ").strip().lower()
+    if use in {"", "y", "yes"}:
+        return {}
+
+    mode = _prompt_choice(
+        prompt,
+        "Default mode [permissive/strict] (permissive): ",
+        {"permissive", "strict"},
+        default="permissive",
+    )
+    if mode:
+        defaults["mode"] = mode
+
+    dt_format = _prompt_datetime_format(
+        prompt, "Default datetime format (empty = infer): "
+    )
+    if dt_format:
+        defaults["datetime"]["format"] = dt_format
+
+    dec_precision = _prompt_int(prompt, "Default decimal precision (empty = none): ")
+    if dec_precision is not None:
+        defaults["decimal"]["precision"] = dec_precision
+    dec_scale = _prompt_int(prompt, "Default decimal scale (empty = none): ")
+    if dec_scale is not None:
+        defaults["decimal"]["scale"] = dec_scale
+    defaults["decimal"]["integer_only"] = _prompt_bool(
+        prompt, "Default decimal integer_only? [y/N] ", default=False
+    )
+
+    s_max = _prompt_int(prompt, "Default string max length (empty = none): ")
+    if s_max is not None:
+        defaults["string"]["max_length"] = s_max
+    s_min = _prompt_int(prompt, "Default string min length (empty = none): ")
+    if s_min is not None:
+        defaults["string"]["min_length"] = s_min
+    defaults["string"]["trim"] = _prompt_bool(
+        prompt, "Default string trim? [Y/n] ", default=True
+    )
+    defaults["string"]["allow_empty"] = _prompt_bool(
+        prompt, "Default string allow empty? [Y/n] ", default=True
+    )
+
+    defaults["json"]["object_only"] = _prompt_bool(
+        prompt, "Default JSON object_only? [y/N] ", default=False
+    )
+
+    defaults["allowed_values"]["case_insensitive"] = _prompt_bool(
+        prompt, "Allowed values case-insensitive? [Y/n] ", default=True
+    )
+
+    nullable = _prompt_bool(
+        prompt,
+        "Override nullable? [y/n/empty for spec]: ",
+        default=None,
+    )
+    if nullable is not None:
+        defaults["nullable"]["allow_nulls"] = nullable
+
+    return defaults
+
+
+def _default_validation_settings() -> dict:
+    return {
+        "mode": "permissive",
+        "datetime": {"format": None},
+        "decimal": {
+            "precision": None,
+            "scale": None,
+            "integer_only": False,
+            "min": None,
+            "max": None,
+        },
+        "string": {
+            "min_length": None,
+            "max_length": None,
+            "allow_empty": True,
+            "trim": True,
+        },
+        "json": {"object_only": False},
+        "allowed_values": {"case_insensitive": False},
+        "nullable": {"allow_nulls": None},
+        "presence": {"enforce": True},
+    }
+
+
+def _prompt_column_validation(
+    *, target_name: str, data_type: str | None, prompt: PromptFunc
+) -> dict | None:
+    use = prompt(f"Override validation for {target_name}? [y/N] ").strip().lower()
+    if use not in {"y", "yes"}:
+        return None
+
+    if data_type is None:
+        data_type = _prompt_choice(
+            prompt,
+            "Column type [string|decimal|datetime|json]: ",
+            {"string", "decimal", "datetime", "json"},
+            default="string",
+        ) or "string"
+    else:
+        data_type = data_type.strip().lower()
+
+    out: dict = {}
+    mode = _prompt_choice(
+        prompt,
+        "Mode override [permissive/strict/empty]: ",
+        {"permissive", "strict"},
+        default=None,
+        allow_empty=True,
+    )
+    if mode:
+        out["mode"] = mode
+
+    nullable = _prompt_bool(
+        prompt, "Override nullable? [y/n/empty]: ", default=None
+    )
+    if nullable is not None:
+        out.setdefault("nullable", {})["allow_nulls"] = nullable
+
+    if data_type in {"datetime", "date/time"}:
+        fmt = _prompt_datetime_format(
+            prompt, "Datetime format override (empty = infer): "
+        )
+        if fmt:
+            out.setdefault("datetime", {})["format"] = fmt
+    elif data_type == "decimal":
+        prec = _prompt_int(prompt, "Decimal precision override (empty = none): ")
+        if prec is not None:
+            out.setdefault("decimal", {})["precision"] = prec
+        scale = _prompt_int(prompt, "Decimal scale override (empty = none): ")
+        if scale is not None:
+            out.setdefault("decimal", {})["scale"] = scale
+        integer_only = _prompt_bool(
+            prompt, "Decimal integer_only? [y/N] ", default=False
+        )
+        out.setdefault("decimal", {})["integer_only"] = integer_only
+        min_val = _prompt_decimal(prompt, "Decimal min (empty = none): ")
+        if min_val is not None:
+            out.setdefault("decimal", {})["min"] = str(min_val)
+        max_val = _prompt_decimal(prompt, "Decimal max (empty = none): ")
+        if max_val is not None:
+            out.setdefault("decimal", {})["max"] = str(max_val)
+    elif data_type == "string":
+        min_len = _prompt_int(prompt, "String min length (empty = none): ")
+        if min_len is not None:
+            out.setdefault("string", {})["min_length"] = min_len
+        max_len = _prompt_int(prompt, "String max length (empty = none): ")
+        if max_len is not None:
+            out.setdefault("string", {})["max_length"] = max_len
+        out.setdefault("string", {})["allow_empty"] = _prompt_bool(
+            prompt, "Allow empty string? [Y/n] ", default=True
+        )
+        out.setdefault("string", {})["trim"] = _prompt_bool(
+            prompt, "Trim strings before checks? [Y/n] ", default=True
+        )
+    elif data_type == "json":
+        out.setdefault("json", {})["object_only"] = _prompt_bool(
+            prompt, "Require JSON object only? [y/N] ", default=False
+        )
+
+    allowed_ci = _prompt_bool(
+        prompt, "Allowed values case-insensitive? [Y/n/empty]: ", default=None
+    )
+    if allowed_ci is not None:
+        out.setdefault("allowed_values", {})["case_insensitive"] = allowed_ci
+
+    presence = _prompt_bool(
+        prompt, "Enforce presence for this column? [Y/n/empty]: ", default=None
+    )
+    if presence is not None:
+        out.setdefault("presence", {})["enforce"] = presence
+
+    return out or None
+
+
+def _prompt_int(prompt: PromptFunc, text: str) -> int | None:
+    while True:
+        value = prompt(text).strip()
+        if value == "":
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            print("Invalid integer. Try again.\n")
+
+
+def _prompt_bool(
+    prompt: PromptFunc, text: str, *, default: bool | None
+) -> bool | None:
+    while True:
+        value = prompt(text).strip().lower()
+        if value == "":
+            return default
+        if value in {"y", "yes"}:
+            return True
+        if value in {"n", "no"}:
+            return False
+        print("Invalid choice. Enter y or n.\n")
+
+
+def _prompt_choice(
+    prompt: PromptFunc,
+    text: str,
+    choices: set[str],
+    *,
+    default: str | None,
+    allow_empty: bool = False,
+) -> str | None:
+    while True:
+        value = prompt(text).strip().lower()
+        if value == "":
+            return default if allow_empty else default
+        if value in choices:
+            return value
+        print(f"Invalid choice. Options: {', '.join(sorted(choices))}\n")
+
+
+def _prompt_decimal(prompt: PromptFunc, text: str) -> Decimal | None:
+    while True:
+        value = prompt(text).strip()
+        if value == "":
+            return None
+        try:
+            return Decimal(value)
+        except (InvalidOperation, ValueError):
+            print("Invalid number. Try again.\n")
+
+
+def _prompt_datetime_format(prompt: PromptFunc, text: str) -> str | None:
+    while True:
+        value = prompt(text).strip()
+        if value == "":
+            return None
+        if "%" not in value or not any(
+            token in value for token in ("%Y", "%y", "%m", "%d", "%H", "%M", "%S")
+        ):
+            print("Invalid format. Include datetime directives like %Y-%m-%d.\n")
+            continue
+        try:
+            now = datetime.now(timezone.utc)
+            _ = now.strftime(value)
+        except Exception:
+            print("Invalid datetime format string. Try again.\n")
+            continue
+        return value
 
 
 def _norm(value: str) -> str:

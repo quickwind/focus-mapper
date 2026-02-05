@@ -12,9 +12,11 @@ def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:
 
     # Minimal inputs: accept suggested columns and skip extras.
     inputs_list = [
+        "",  # use default validation settings
         "",  # header prompt for first target
         "1",  # from_column
         "",  # use suggested
+        "n",  # no per-column validation override
     ]
     for _ in range(len(spec.columns) - 1):
         inputs_list.extend(["", "11"])  # header + skip

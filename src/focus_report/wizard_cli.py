@@ -5,6 +5,8 @@ import logging
 import sys
 from pathlib import Path
 
+import yaml
+
 from .completer import path_completion
 from .io import read_table
 from .mapping.config import MappingConfig
@@ -61,31 +63,28 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _write_mapping(path: Path, mapping: MappingConfig) -> None:
-    lines: list[str] = []
-    lines.append(f'spec_version: "{mapping.spec_version}"\n')
-    lines.append("mappings:\n")
+    data: dict[str, object] = {
+        "spec_version": mapping.spec_version,
+        "mappings": {},
+    }
+    if mapping.validation_defaults:
+        data["validation"] = {"default": mapping.validation_defaults}
+
+    mappings: dict[str, object] = {}
     for rule in mapping.rules:
-        lines.append(f"  {rule.target}:\n")
+        body: dict[str, object] = {"steps": rule.steps}
         if rule.description:
-            lines.append(f'    description: "{rule.description}"\n')
-        lines.append("    steps:\n")
-        for step in rule.steps:
-            lines.append(f"      - op: {step['op']}\n")
-            for k, v in step.items():
-                if k == "op":
-                    continue
-                if v is None:
-                    lines.append(f"        {k}: null\n")
-                elif isinstance(v, str):
-                    lines.append(f'        {k}: "{v}"\n')
-                elif isinstance(v, list):
-                    lines.append(f"        {k}:\n")
-                    for item in v:
-                        lines.append(f'          - "{item}"\n')
-                else:
-                    lines.append(f"        {k}: {v}\n")
-        lines.append("\n")
-    path.write_text("".join(lines), encoding="utf-8")
+            body["description"] = rule.description
+        if rule.validation:
+            body["validation"] = rule.validation
+        mappings[rule.target] = body
+
+    data["mappings"] = mappings
+
+    path.write_text(
+        yaml.safe_dump(data, sort_keys=False, default_flow_style=False),
+        encoding="utf-8",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -64,6 +64,7 @@ Optional flags:
 - `--include-optional` to include Optional columns
 
 Tip: column name prompts support tab‑completion (case‑insensitive).
+The wizard will also show a summary of default validation settings and let you override them globally or per column.
 
 ## Mapping YAML Specification
 
@@ -75,6 +76,30 @@ Each column in the `mappings` section is defined as a series of **steps**. Steps
 ### Top-level Structure
 ```yaml
 spec_version: "1.2"
+validation:
+  default:
+    mode: permissive
+    datetime:
+      format: null
+    decimal:
+      precision: null
+      scale: null
+      integer_only: false
+      min: null
+      max: null
+    string:
+      min_length: null
+      max_length: null
+      allow_empty: true
+      trim: true
+    json:
+      object_only: false
+    allowed_values:
+      case_insensitive: false
+    nullable:
+      allow_nulls: null
+    presence:
+      enforce: true
 mappings:
   # Standard FOCUS column name
   BilledCost:
@@ -86,6 +111,42 @@ mappings:
         to: "decimal"
         scale: 2
 ```
+
+### Validation Overrides (Optional)
+
+Validation is **permissive by default** unless you define `validation.default`. You can override validation for individual columns inside each mapping:
+
+```yaml
+mappings:
+  BillingPeriodStart:
+    steps:
+      - op: pandas_expr
+        expr: 'pd.to_datetime(df["billing_period"] + "-01", utc=True)'
+    validation:
+      mode: strict
+      datetime:
+        format: "%Y-%m-%dT%H:%M:%SZ"
+
+  BilledCost:
+    steps:
+      - op: from_column
+        column: billed_cost
+    validation:
+      decimal:
+        precision: 12
+        scale: 2
+        min: 0
+```
+
+Validation override keys:
+- `mode`: `permissive` or `strict`
+- `datetime.format`: strftime format; if omitted, permissive uses inference
+- `decimal`: `precision`, `scale`, `integer_only`, `min`, `max`
+- `string`: `min_length`, `max_length`, `allow_empty`, `trim`
+- `json.object_only`: require JSON objects only
+- `allowed_values.case_insensitive`: case‑insensitive matching (default: false)
+- `nullable.allow_nulls`: override spec nullability
+- `presence.enforce`: skip “missing column” checks
 
 ### Example Input (CSV)
 

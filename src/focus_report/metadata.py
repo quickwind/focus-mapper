@@ -171,8 +171,14 @@ def mapping_yaml_canonical(mapping: MappingConfig) -> str:
     # Stable-ish canonical form for hashing: deterministic json.
     data = {
         "spec_version": mapping.spec_version,
+        "validation": {"default": mapping.validation_defaults},
         "rules": [
-            {"target": r.target, "description": r.description, "steps": r.steps}
+            {
+                "target": r.target,
+                "description": r.description,
+                "steps": r.steps,
+                "validation": r.validation,
+            }
             for r in mapping.rules
         ],
     }

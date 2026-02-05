@@ -34,5 +34,5 @@ def test_generate_and_validate_focus_dataset_from_fixtures() -> None:
     assert out["x_MathTotal"].tolist() == [13.57, 5.5]
     assert out["x_WhenTax"].tolist() == ["N", "Y"]
 
-    report = validate_focus_dataframe(out, spec=spec)
+    report = validate_focus_dataframe(out, spec=spec, mapping=mapping)
     assert report.summary.errors == 0
