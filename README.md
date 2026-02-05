@@ -1,5 +1,7 @@
 # focus-mapper
 
+![CI](https://github.com/quickwind/focus-mapping/actions/workflows/ci.yml/badge.svg)
+
 Generate FinOps FOCUS compliant reports from a pre-flattened telemetry/billing table.
 
 This project takes any tabular data (CSV/Parquet) and converts it to a FOCUS compliant report using a YAML mapping. Use the interactive wizard to build the mapping, or hand‑author it.
