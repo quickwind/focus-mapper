@@ -98,6 +98,9 @@ def path_completion() -> Generator[None, None, None]:
 
     old_completer = readline.get_completer()
     old_delims = readline.get_completer_delims()
+    old_display_hook = None
+    if hasattr(readline, "get_completion_display_matches_hook"):
+        old_display_hook = readline.get_completion_display_matches_hook()
 
     try:
         readline.set_completer(PathCompleter())
@@ -112,9 +115,19 @@ def path_completion() -> Generator[None, None, None]:
         # On Windows, do not treat backslash or ':' as delimiters.
         if os.name == "nt":
             readline.set_completer_delims(" \t\n\"'`@$><=;|&{(/")
+            if hasattr(readline, "set_completion_display_matches_hook"):
+                def _display_hook(substitution, matches, longest):  # type: ignore[no-redef]
+                    basenames = [os.path.basename(m.rstrip("\\/")) for m in matches]
+                    print()
+                    print("  " + "  ".join(basenames))
+                    readline.redisplay()
+
+                readline.set_completion_display_matches_hook(_display_hook)
         else:
             readline.set_completer_delims(" \t\n\"\\'`@$><=;|&{(/")
         yield
     finally:
         readline.set_completer(old_completer)
         readline.set_completer_delims(old_delims)
+        if hasattr(readline, "set_completion_display_matches_hook"):
+            readline.set_completion_display_matches_hook(old_display_hook)
