@@ -19,6 +19,7 @@ class Column:
     allowed_values: list[str] | None
     numeric_precision: int | None
     numeric_scale: int | None
+    description: str | None
 
 
 BASE = "https://raw.githubusercontent.com/FinOps-Open-Cost-and-Usage-Spec/FOCUS_Spec"
@@ -222,7 +223,9 @@ def _discover_index_path(ref: str, path_hint: str | None) -> tuple[str, str, lis
     column_md = [p for p in blobs if p.endswith(".mdpp") or p.endswith(".md")]
     column_json = [p for p in blobs if p.endswith(".json")]
     if not column_md and not column_json:
-        raise RuntimeError("Unable to locate columns index or column files via GitHub API")
+        raise RuntimeError(
+            "Unable to locate columns index or column files via GitHub API"
+        )
 
     scored: dict[str, int] = {}
     for p in column_md + column_json:
@@ -304,8 +307,21 @@ def _parse_columns_from_markdown(md: str) -> list[Column]:
         if dm:
             display = dm.group(1).strip()
 
+        description = None
+        desc_m = re.search(
+            r"^(?:#####|##) Description\s*\n(.*?)(?=\n^#|\Z)",
+            block,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        if desc_m:
+            d = desc_m.group(1).strip()
+            if d:
+                description = d
+
         constraints = _parse_constraints_from_block(block)
-        allowed_values = parse_allowed_values(block, column_id=name, display_name=display)
+        allowed_values = parse_allowed_values(
+            block, column_id=name, display_name=display
+        )
 
         feature_level = constraints.get("Feature level", "Unknown")
         allows_nulls_str = constraints.get("Allows nulls", "True")
@@ -337,6 +353,7 @@ def _parse_columns_from_markdown(md: str) -> list[Column]:
                 allowed_values=allowed_values,
                 numeric_precision=numeric_precision,
                 numeric_scale=numeric_scale,
+                description=description,
             )
         )
 
@@ -368,7 +385,9 @@ def _parse_metadata_entries(md: str) -> dict[str, dict[str, str]]:
     return entries
 
 
-def _collect_metadata_entries(ref: str, metadata_path: str) -> dict[str, dict[str, str]]:
+def _collect_metadata_entries(
+    ref: str, metadata_path: str
+) -> dict[str, dict[str, str]]:
     def fetch_and_parse(path: str, seen: set[str]) -> dict[str, dict[str, str]]:
         if path in seen:
             return {}
@@ -444,7 +463,11 @@ def _build_metadata_schema(entries: dict[str, dict[str, str]]) -> dict[str, dict
 
     if dataset_instance_fields:
         metadata["DatasetInstance"] = {
-            **({"__self__": field("DatasetInstance")} if field("DatasetInstance") else {}),
+            **(
+                {"__self__": field("DatasetInstance")}
+                if field("DatasetInstance")
+                else {}
+            ),
             **dataset_instance_fields,
         }
 
@@ -487,7 +510,11 @@ def _build_metadata_schema(entries: dict[str, dict[str, str]]) -> dict[str, dict
         schema_obj.update(schema_fields)
         if column_definition_fields or column_definition_self:
             schema_obj["ColumnDefinition"] = {
-                **({"__self__": column_definition_self} if column_definition_self else {}),
+                **(
+                    {"__self__": column_definition_self}
+                    if column_definition_self
+                    else {}
+                ),
                 **column_definition_fields,
             }
         metadata["Schema"] = schema_obj
@@ -524,6 +551,7 @@ def _parse_column_from_json(data: dict) -> Column | None:
         return None
 
     reference = None
+
     def collect_allowed_values(req_obj: dict) -> list[str]:
         values: list[str] = []
         if not isinstance(req_obj, dict):
@@ -616,6 +644,7 @@ def _parse_column_from_json(data: dict) -> Column | None:
         allowed_values=allowed_values,
         numeric_precision=numeric_precision,
         numeric_scale=numeric_scale,
+        description=None,
     )
 
 
@@ -721,7 +750,9 @@ def main(argv: list[str] | None = None) -> int:
         metadata = _build_metadata_schema(entries)
     except RuntimeError:
         try:
-            print("Metadata index not found at default path. Discovering via GitHub API...")
+            print(
+                "Metadata index not found at default path. Discovering via GitHub API..."
+            )
             meta_path = _discover_metadata_path(ref, "specification/metadata")
             if meta_path:
                 print(f"Discovered metadata schema: {meta_path}")
@@ -756,6 +787,7 @@ def main(argv: list[str] | None = None) -> int:
                 "allowed_values": c.allowed_values,
                 "numeric_precision": c.numeric_precision,
                 "numeric_scale": c.numeric_scale,
+                "description": c.description,
             }
             for c in columns
         ],
