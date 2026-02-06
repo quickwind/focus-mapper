@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Callable
 
 import pandas as pd
@@ -29,7 +28,7 @@ def run_wizard(
     prompt: PromptFunc,
     include_optional: bool,
     include_recommended: bool,
-    include_conditional: bool
+    include_conditional: bool,
 ) -> WizardResult:
     columns = list(input_df.columns)
     normalized = {_norm(c): c for c in columns}
@@ -40,7 +39,7 @@ def run_wizard(
         spec,
         include_optional=include_optional,
         include_recommended=include_recommended,
-        include_conditional=include_conditional
+        include_conditional=include_conditional,
     )
     rules: list[MappingRule] = []
 
@@ -79,12 +78,16 @@ def run_wizard(
             rules=rules,
             validation_defaults=default_validation,
         ),
-        selected_targets=targets,
+        selected_targets=[t.name for t in targets],
     )
 
 
 def _select_targets(
-    spec: FocusSpec, *, include_optional: bool, include_recommended: bool, include_conditional: bool
+    spec: FocusSpec,
+    *,
+    include_optional: bool,
+    include_recommended: bool,
+    include_conditional: bool,
 ) -> list[FocusColumnSpec]:
     targets: list[FocusColumnSpec] = []
     for col in spec.columns:
@@ -108,6 +111,8 @@ def _prompt_for_steps(
     prompt: PromptFunc,
 ) -> list[dict]:
     header = f"{'=' * 50}\nTarget column: \n\t{target.name} ({target.feature_level})"
+    if target.description:
+        header += f"\n\tDescription: {target.description}"
     if suggested:
         header += f"\n\t(suggested input: {suggested})"
     _ = print(f"{header}\n")
@@ -143,14 +148,18 @@ def _prompt_for_steps(
             if allow_cast:
                 choice = prompt(
                     "Add step: [1] map_values [2] cast [3] round [4] math "
-                    "[5] when [6] pandas_expr [7] done\n(Default is \"done\") > "
+                    '[5] when [6] pandas_expr [7] done\n(Default is "done") > '
                 ).strip()
             else:
                 choice = prompt(
                     "Add step: [1] map_values [2] round [3] math "
-                    "[4] when [5] pandas_expr [6] done\n(Default is \"done\") > "
+                    '[4] when [5] pandas_expr [6] done\n(Default is "done") > '
                 ).strip()
-            if not choice or choice in {"7", "done"} or (not allow_cast and choice in {"6", "done"}):
+            if (
+                not choice
+                or choice in {"7", "done"}
+                or (not allow_cast and choice in {"6", "done"})
+            ):
                 return steps
 
         if not has_series:
@@ -162,7 +171,11 @@ def _prompt_for_steps(
                 allowed = target.allowed_values or []
                 allow_null = bool(target.allows_nulls)
                 if allowed:
-                    print("Allowed values:\n" + "\n".join(f"- {v}" for v in allowed) + "\n")
+                    print(
+                        "Allowed values:\n"
+                        + "\n".join(f"- {v}" for v in allowed)
+                        + "\n"
+                    )
                     while True:
                         with value_completion(allowed):
                             value = prompt(
@@ -184,7 +197,9 @@ def _prompt_for_steps(
                     if value == "" and not allow_null:
                         print("Null is not allowed for this column.\n")
                         continue
-                    steps.append({"op": "const", "value": value if value != "" else None})
+                    steps.append(
+                        {"op": "const", "value": value if value != "" else None}
+                    )
                 has_series = True
             elif choice in {"3", "coalesce"}:
                 cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
@@ -264,12 +279,14 @@ def _prompt_for_steps(
                     if precision != "":
                         step["precision"] = int(precision)
                 steps.append(step)
-            elif (allow_cast and choice in {"3", "round"}) or (not allow_cast and choice in {"2", "round"}):
+            elif (allow_cast and choice in {"3", "round"}) or (
+                not allow_cast and choice in {"2", "round"}
+            ):
                 ndigits = prompt("Round ndigits (int, default 0): ").strip()
-                steps.append(
-                    {"op": "round", "ndigits": int(ndigits) if ndigits else 0}
-                )
-            elif (allow_cast and choice in {"4", "math"}) or (not allow_cast and choice in {"3", "math"}):
+                steps.append({"op": "round", "ndigits": int(ndigits) if ndigits else 0})
+            elif (allow_cast and choice in {"4", "math"}) or (
+                not allow_cast and choice in {"3", "math"}
+            ):
                 operator = prompt("Operator [add|sub|mul|div]: ").strip()
                 operands: list[dict] = []
                 while True:
@@ -287,7 +304,9 @@ def _prompt_for_steps(
                         val = prompt("Constant value: ").strip()
                         operands.append({"const": val})
                 steps.append({"op": "math", "operator": operator, "operands": operands})
-            elif (allow_cast and choice in {"5", "when"}) or (not allow_cast and choice in {"4", "when"}):
+            elif (allow_cast and choice in {"5", "when"}) or (
+                not allow_cast and choice in {"4", "when"}
+            ):
                 col = _pick_column(columns, prompt=prompt, suggested=suggested)
                 value = prompt("If value equals: ").strip()
                 then_value = prompt("Then value: ").strip()
@@ -301,7 +320,9 @@ def _prompt_for_steps(
                 if else_value != "":
                     step["else"] = else_value
                 steps.append(step)
-            elif (allow_cast and choice in {"6", "pandas_expr"}) or (not allow_cast and choice in {"5", "pandas_expr"}):
+            elif (allow_cast and choice in {"6", "pandas_expr"}) or (
+                not allow_cast and choice in {"5", "pandas_expr"}
+            ):
                 expr = prompt(
                     "Enter pandas expression (use df, pd, and/or current): "
                 ).strip()
@@ -498,12 +519,15 @@ def _prompt_column_validation(
         return None
 
     if data_type is None:
-        data_type = _prompt_choice(
-            prompt,
-            "Column type [string|decimal|datetime|json]: ",
-            {"string", "decimal", "datetime", "json"},
-            default="string",
-        ) or "string"
+        data_type = (
+            _prompt_choice(
+                prompt,
+                "Column type [string|decimal|datetime|json]: ",
+                {"string", "decimal", "datetime", "json"},
+                default="string",
+            )
+            or "string"
+        )
     else:
         data_type = data_type.strip().lower()
 
@@ -518,9 +542,7 @@ def _prompt_column_validation(
     if mode:
         out["mode"] = mode
 
-    nullable = _prompt_bool(
-        prompt, "Override nullable? [y/n/empty]: ", default=None
-    )
+    nullable = _prompt_bool(prompt, "Override nullable? [y/n/empty]: ", default=None)
     if nullable is not None:
         out.setdefault("nullable", {})["allow_nulls"] = nullable
 
@@ -617,9 +639,7 @@ def _prompt_int(prompt: PromptFunc, text: str) -> int | None:
             print("Invalid integer. Try again.\n")
 
 
-def _prompt_bool(
-    prompt: PromptFunc, text: str, *, default: bool | None
-) -> bool | None:
+def _prompt_bool(prompt: PromptFunc, text: str, *, default: bool | None) -> bool | None:
     while True:
         value = prompt(text).strip().lower()
         if value == "":

@@ -192,7 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Wrote mapping to {output_path}")
         return 0
     except Exception as e:
-        logger.exception("Failed to write mapping file")
+        logger.exception(f"Failed to write mapping file: {e}")
         return 2
 
 

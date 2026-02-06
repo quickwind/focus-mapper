@@ -21,6 +21,7 @@ class FocusColumnSpec:
     feature_level: str
     allows_nulls: bool
     data_type: str
+    description: str | None = None
     value_format: str | None = None
     allowed_values: list[str] | None = None
     numeric_precision: int | None = None
@@ -87,7 +88,7 @@ def coerce_series_to_type(series: pd.Series, col: FocusColumnSpec) -> pd.Series:
     except SpecError:
         raise
     except Exception as err:
-        raise Exception(f'Failed to convert type for column {col.name}: {err}')
+        raise Exception(f"Failed to convert type for column {col.name}: {err}")
 
 
 def _coerce_decimal(series: pd.Series) -> pd.Series:
@@ -157,6 +158,7 @@ def load_focus_spec(version: str) -> FocusSpec:
                 feature_level=item["feature_level"],
                 allows_nulls=bool(item["allows_nulls"]),
                 data_type=item["data_type"],
+                description=item.get("description"),
                 value_format=item.get("value_format"),
                 allowed_values=item.get("allowed_values"),
                 numeric_precision=item.get("numeric_precision"),
