@@ -112,9 +112,9 @@ def _prompt_for_steps(
 ) -> list[dict]:
     header = f"{'=' * 50}\nTarget column: \n\t{target.name} ({target.feature_level})"
     if target.description:
-        header += f"\n\tDescription: {target.description}"
+        header += f"\n\n\tDescription: {target.description}"
     if suggested:
-        header += f"\n\t(suggested input: {suggested})"
+        header += f"\n\n\t(suggested input: {suggested})"
     _ = print(f"{header}\n")
 
     allow_cast = target.data_type.strip().lower() not in {
