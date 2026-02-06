@@ -45,6 +45,7 @@ parquet = [
 dev = [
   "pytest>=8.0",
   "pytest-cov>=5.0",
+  "pytest-html",
   "pyarrow>=14.0",
 ]
 
@@ -63,4 +64,6 @@ focus_mapper = ["specs/**/*.json"]
 where = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=focus_mapper --cov-branch --cov-report=term-missing --cov-report=html --cov-report=xml"
+testpaths = ["tests"]
+norecursedirs = [".*", "dist", "build", "src", "tools", "test", "htmlcov"]
+addopts = "--html=test-report/report.html --cov=focus_mapper --cov-branch --cov-report=term-missing --cov-report=html --cov-report=xml"

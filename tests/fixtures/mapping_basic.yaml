@@ -95,7 +95,7 @@ mappings:
   ServiceSubcategory:
     steps:
       - op: const
-        value: "Virtual Machines"
+        value: "Compute"
 
   ServiceName:
     steps:
