@@ -187,6 +187,11 @@ def apply_steps(
             series = pd.Series([value] * len(df))
             continue
 
+        if op == "null":
+            # Initialize series with all null values
+            series = pd.Series([pd.NA] * len(df))
+            continue
+
         if op == "coalesce":
             # Take the first non-null value from a list of input columns
             cols = step.get("columns")

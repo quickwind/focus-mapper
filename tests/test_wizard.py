@@ -22,7 +22,14 @@ def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:
         elif col.allows_nulls:
             inputs_list.append("")
         else:
-            inputs_list.append("X")
+            # Provide type-appropriate values for non-nullable columns
+            data_type = (col.data_type or "").strip().lower()
+            if data_type == "decimal":
+                inputs_list.append("0")
+            elif data_type in ("date/time", "datetime"):
+                inputs_list.append("2024-01-01T00:00:00Z")
+            else:
+                inputs_list.append("X")
         inputs_list.append("done")  # finish steps
         inputs_list.append("n")  # no per-column validation override
     inputs_list.append("n")  # no extension

@@ -126,15 +126,25 @@ def _prompt_for_steps(
     allow_skip = target.feature_level.strip().lower() != "mandatory"
     steps: list[dict] = []
     has_series = False
+    allow_null = bool(target.allows_nulls)
+    data_type = target.data_type.strip().lower() if target.data_type else ""
+    is_string = data_type == "string"
+    
     while True:
         if not has_series:
-            choice = prompt(
-                "Choose mapping (init): [1] from_column [2] const [3] coalesce "
-                "[4] map_values [5] concat [6] math [7] pandas_expr"
-                + (" [8] skip" if allow_skip else "")
-                + "\n> "
-            ).strip()
-            if allow_skip and choice in {"8", "skip"}:
+            # Build menu options based on column properties
+            menu = "Choose mapping (init): [1] from_column [2] const"
+            if allow_null:
+                menu += " [3] null [4] coalesce [5] map_values [6] concat [7] math [8] pandas_expr"
+                skip_num = "9"
+            else:
+                menu += " [3] coalesce [4] map_values [5] concat [6] math [7] pandas_expr"
+                skip_num = "8"
+            if allow_skip:
+                menu += f" [{skip_num}] skip"
+            menu += "\n> "
+            choice = prompt(menu).strip()
+            if allow_skip and choice in {skip_num, "skip"}:
                 return []
         else:
             if allow_cast:
@@ -161,7 +171,6 @@ def _prompt_for_steps(
                 has_series = True
             elif choice in {"2", "const"}:
                 allowed = target.allowed_values or []
-                allow_null = bool(target.allows_nulls)
                 if allowed:
                     print(
                         "Allowed values:\n"
@@ -170,34 +179,46 @@ def _prompt_for_steps(
                     )
                     while True:
                         with value_completion(allowed):
-                            value = prompt(
-                                "Choose allowed value"
-                                + (" (empty for null)" if allow_null else "")
-                                + ": "
-                            ).strip()
-                        if (allow_null and value == "") or value in allowed:
-                            steps.append(
-                                {"op": "const", "value": value if value != "" else None}
-                            )
+                            value = prompt("Choose allowed value: ").strip()
+                        if value in allowed:
+                            steps.append({"op": "const", "value": value})
                             break
+                        print(f"Value must be one of: {', '.join(allowed)}\n")
                 else:
-                    value = prompt(
-                        "Enter constant value"
-                        + (" (empty for null)" if allow_null else "")
-                        + ": "
-                    )
-                    if value == "" and not allow_null:
-                        print("Null is not allowed for this column.\n")
-                        continue
-                    steps.append(
-                        {"op": "const", "value": value if value != "" else None}
-                    )
+                    while True:
+                        value = prompt("Enter constant value: ")
+                        
+                        # For non-nullable string columns, reject empty/whitespace-only
+                        if is_string and not allow_null:
+                            if value == "" or value.strip() == "":
+                                print(
+                                    "Error: Empty strings and whitespace-only strings are not allowed "
+                                    "for non-nullable string columns (per FOCUS spec).\n"
+                                )
+                                continue
+                        
+                        # Type-specific validation (only for non-empty, non-string types)
+                        if value and not is_string and data_type:
+                            is_valid, error_msg = _validate_const_value(value, data_type)
+                            if not is_valid:
+                                print(f"Error: {error_msg}\n")
+                                continue
+                        
+                        steps.append({"op": "const", "value": value})
+                        break
                 has_series = True
-            elif choice in {"3", "coalesce"}:
+            elif allow_null and choice in {"3", "null"}:
+                steps.append({"op": "null"})
+                has_series = True
+            elif (allow_null and choice in {"4", "coalesce"}) or (
+                not allow_null and choice in {"3", "coalesce"}
+            ):
                 cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
                 steps.append({"op": "coalesce", "columns": cols})
                 has_series = True
-            elif choice in {"4", "map_values"}:
+            elif (allow_null and choice in {"5", "map_values"}) or (
+                not allow_null and choice in {"4", "map_values"}
+            ):
                 col = _pick_column(columns, prompt=prompt, suggested=suggested)
                 mapping: dict[str, str] = {}
                 print("Enter mapping pairs (empty key to finish).")
@@ -213,12 +234,16 @@ def _prompt_for_steps(
                     step["default"] = default
                 steps.append(step)
                 has_series = True
-            elif choice in {"5", "concat"}:
+            elif (allow_null and choice in {"6", "concat"}) or (
+                not allow_null and choice in {"5", "concat"}
+            ):
                 cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
                 sep = prompt("Separator (empty for none): ").strip()
                 steps.append({"op": "concat", "columns": cols, "sep": sep})
                 has_series = True
-            elif choice in {"6", "math"}:
+            elif (allow_null and choice in {"7", "math"}) or (
+                not allow_null and choice in {"6", "math"}
+            ):
                 operator = prompt("Operator [add|sub|mul|div]: ").strip()
                 operands: list[dict] = []
                 while True:
@@ -235,7 +260,9 @@ def _prompt_for_steps(
                         operands.append({"const": val})
                 steps.append({"op": "math", "operator": operator, "operands": operands})
                 has_series = True
-            elif choice in {"7", "pandas_expr"}:
+            elif (allow_null and choice in {"8", "pandas_expr"}) or (
+                not allow_null and choice in {"7", "pandas_expr"}
+            ):
                 expr = prompt(
                     "Enter pandas expression (use df, pd, and/or current): "
                 ).strip()
@@ -694,6 +721,49 @@ def _prompt_datetime_format(prompt: PromptFunc, text: str) -> str | None:
             print("Invalid datetime format string. Try again.\n")
             continue
         return value
+
+
+def _validate_const_value(value: str, data_type: str) -> tuple[bool, str | None]:
+    """
+    Validate a const value against its data type.
+    
+    Returns (is_valid, error_message).
+    """
+    dt = data_type.strip().lower()
+    
+    if dt == "decimal":
+        # Must be a valid number (int or float format)
+        try:
+            Decimal(value)
+            return (True, None)
+        except (InvalidOperation, ValueError):
+            return (False, "Value must be a valid number (e.g., '123', '123.45', '-10.5')")
+    
+    elif dt in ("date/time", "datetime"):
+        # Must be ISO8601 format (basic validation)
+        # Examples: 2024-01-15, 2024-01-15T10:30:00Z, 2024-01-15T10:30:00+00:00
+        # Try common ISO8601 formats
+        iso_formats = [
+            "%Y-%m-%d",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%dT%H:%M:%S%z",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S.%fZ",
+            "%Y-%m-%dT%H:%M:%S.%f%z",
+        ]
+        
+        for fmt in iso_formats:
+            try:
+                datetime.strptime(value.replace("+00:00", "+0000"), fmt)
+                return (True, None)
+            except ValueError:
+                continue
+        
+        return (False, "Value must be in ISO8601 datetime format (e.g., '2024-01-15' or '2024-01-15T10:30:00Z')")
+    
+    # For string and other types (json), accept any value
+    return (True, None)
 
 
 def _norm(value: str) -> str:
