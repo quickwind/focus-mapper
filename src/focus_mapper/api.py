@@ -120,6 +120,13 @@ def generate(
         ... else:
         ...     print(f"Validation errors: {result.validation.summary.errors}")
     """
+    # Resolve generator info
+    import os
+    gen_name = generator_name
+    if gen_name == "focus-mapper" or gen_name is None:
+        gen_name = os.environ.get("FOCUS_DATA_GENERATOR_NAME", "focus-mapper")
+    gen_ver = generator_version or os.environ.get("FOCUS_DATA_GENERATOR_VERSION", __version__)
+
     # Resolve mapping
     if isinstance(mapping, (str, Path)):
         mapping = load_mapping_config(Path(mapping))
@@ -163,8 +170,8 @@ def generate(
     metadata = build_sidecar_metadata(
         spec=spec,
         mapping=mapping,
-        generator_name=generator_name,
-        generator_version=generator_version or __version__,
+        generator_name=gen_name,
+        generator_version=gen_ver,
         input_path=input_path,
         output_path=output_path,
         output_df=output_df,

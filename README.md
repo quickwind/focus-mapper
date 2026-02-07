@@ -71,6 +71,21 @@ spec = load_focus_spec("v1.3", spec_dir="/path/to/specs")
 
 If a version isn't found in the external directory, it falls back to bundled specs.
 
+## Data Generator Configuration
+
+You can customize the `DataGenerator` metadata field (used in v1.3+) using environment variables. This is useful when wrapping `focus-mapper` in another tool.
+
+**Environment Variables:**
+
+- `FOCUS_DATA_GENERATOR_NAME`: Override the generator name (default: `focus-mapper`)
+- `FOCUS_DATA_GENERATOR_VERSION`: Override the generator version (default: library version)
+
+**Priority Order:**
+
+1. Explicit arguments (CLI `--data-generator` or API `generator_name`)
+2. Environment variables
+3. Default values
+
 ## What You Need
 
 - A flat input table (CSV or Parquet).

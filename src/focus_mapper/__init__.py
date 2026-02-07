@@ -8,7 +8,7 @@ Main API:
 """
 
 # Define version first to avoid circular imports
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # Import API after version is defined
 from .api import (

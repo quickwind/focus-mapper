@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-02-07
+
+### 🎉 Library API & v1.3 Support
+
+This release introduces a stable Python library API, full support for FOCUS v1.3, and flexible external spec management.
+
+### Features
+
+#### Library API
+- New `focus_mapper.api` module with high-level entrypoints:
+  - **`generate()`**: Generate FOCUS reports programmatically
+  - **`validate()`**: Validate existing datasets
+  - **`validate_mapping()`**: Check mapping configuration validity
+- Exported type definitions for better IDE support/type hinting
+
+#### FOCUS v1.3 Support
+- Full support for **FOCUS v1.3** specification
+- **Default Version Change**: `v1.3` is now the default version for CLI and library (previously `v1.2`)
+- **Metadata**: Support for v1.3 metadata collections (`DatasetInstance`, `Recency`, `Schema`, `DataGenerator`)
+- **DataGenerator Customization**: usage of `FOCUS_DATA_GENERATOR_NAME` and `FOCUS_DATA_GENERATOR_VERSION` environment variables
+- **Validation**: Updated validation rules for v1.3 columns and constraints
+
+#### External Spec Management
+- **Overrides**: Load custom/development specs from external directory using:
+  - CLI: `--spec-dir /path/to/specs`
+  - Env Var: `FOCUS_SPEC_DIR=/path/to/specs`
+  - API parameter: `generate(..., spec_dir="/path/to/specs")`
+- **Naming Convention**: Spec files now use `focus_spec_vX.Y.json` format
+- **Populate Tool**: Defaults to `specification/datasets/cost_and_usage/columns` for v1.3+
+
+### Changed
+- **Defaults**: All tools now default to FOCUS `v1.3`
+- **CLI**: Added `--spec-dir` flag to `generate` and `validate` commands
+- **File Naming**: Renamed internal spec files from `focus_vX_Y.json` to `focus_spec_vX.Y.json`
+- **Validation**: Improved severity handling (Mandatory/Recommended/Conditional/Optional)
+
 ## [0.1.0] - 2026-02-07
 
 ### 🎉 Initial Release

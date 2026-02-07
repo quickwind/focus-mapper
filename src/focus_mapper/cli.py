@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import logging
 import sys
@@ -69,10 +70,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Validation report JSON output path (default: <output>.validation.json)",
     )
     gen.add_argument(
-        "--data-generator", default="focus-mapper", help="Data generator name"
+        "--data-generator", help="Data generator name (overrides ENV: FOCUS_DATA_GENERATOR_NAME)"
     )
     gen.add_argument(
-        "--data-generator-version", default=__version__, help="Data generator version"
+        "--data-generator-version", help="Data generator version (overrides ENV: FOCUS_DATA_GENERATOR_VERSION)"
     )
     gen.add_argument(
         "--spec-dir",
@@ -174,8 +175,8 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     sidecar = build_sidecar_metadata(
         spec=spec,
         mapping=mapping,
-        generator_name=getattr(args, "data_generator", "focus-mapper"),
-        generator_version=getattr(args, "data_generator_version", __version__),
+        generator_name=args.data_generator or os.environ.get("FOCUS_DATA_GENERATOR_NAME", "focus-mapper"),
+        generator_version=args.data_generator_version or os.environ.get("FOCUS_DATA_GENERATOR_VERSION", __version__),
         input_path=input_path,
         output_path=output_path,
         output_df=out_df,
