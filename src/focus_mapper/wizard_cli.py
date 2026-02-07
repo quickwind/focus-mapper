@@ -11,13 +11,22 @@ from .completer import path_completion
 from .io import read_table
 from .mapping.config import MappingConfig
 from .spec import load_focus_spec, list_available_spec_versions
-from .wizard import run_wizard
+from .wizard import run_wizard, PromptFunc
 
 logger = logging.getLogger("focus_mapper.wizard")
 
 
 def _path(p: str) -> Path:
     return Path(p).expanduser()
+
+
+def _prompt_input_path(prompt: PromptFunc) -> Path:
+    """Prompt user for input file path with path completion."""
+    while True:
+        with path_completion():
+            val = prompt("Input file (CSV/Parquet): ").strip()
+        if val:
+            return _path(val)
 
 
 def _eprint(message: str) -> None:
@@ -96,104 +105,94 @@ def main(argv: list[str] | None = None) -> int:
     def prompt(text: str) -> str:
         return input(text)
 
-    while True:
-        available = list_available_spec_versions()
-        default_spec = "v1.2"
-        if available and default_spec not in available:
-            default_spec = available[-1]
-        spec_version = (
-            args.spec
-            or prompt(
-                f"FOCUS spec version [{default_spec}]"
-                + (f" (available: {', '.join(available)})" if available else "")
-                + ": "
-            ).strip()
-            or default_spec
-        )
-        try:
-            logger.debug("Loading FOCUS spec version: %s", spec_version)
-            spec = load_focus_spec(spec_version)
-            break
-        except Exception as e:
-            _eprint(f"Error: {e}")
-            if args.spec:
-                return 2
-
-    input_path = args.input
-    while input_path is None:
-        with path_completion():
-            val = prompt("Input file (CSV/Parquet): ").strip()
-        if val:
-            input_path = _path(val)
-
-    df = None
-    while df is None:
-        if not input_path.exists():
-            _eprint(f"Error: input file not found: {input_path}")
-            if args.input:
-                return 2
-            input_path = None
-            while input_path is None:
-                with path_completion():
-                    val = prompt("Input file (CSV/Parquet): ").strip()
-                if val:
-                    input_path = _path(val)
-            continue
-
-        try:
-            logger.debug("Reading input dataset: %s", input_path)
-            df = read_table(input_path)
-        except Exception as e:
-            _eprint(f"Error: failed to read input file: {e}")
-            if args.input:
-                return 2
-            input_path = None
-            while input_path is None:
-                with path_completion():
-                    val = prompt("Input file (CSV/Parquet): ").strip()
-                if val:
-                    input_path = _path(val)
-
-    output_path = args.output
-    while output_path is None:
-        with path_completion():
-            val = prompt("Output mapping YAML path [mapping.yaml]: ").strip()
-        output_path = _path(val or "mapping.yaml")
-
-    include_recommended = args.include_recommended
-    if not include_recommended:
-        answer = prompt("Include Recommended columns? [y/N] ").strip().lower()
-        include_recommended = answer in {"y", "yes"}
-
-    include_conditional = args.include_conditional
-    if not include_conditional:
-        answer = prompt("Include Conditional columns? [y/N] ").strip().lower()
-        include_conditional = answer in {"y", "yes"}
-
-    include_optional = args.include_optional
-    if not include_optional:
-        answer = prompt("Include Optional columns? [y/N] ").strip().lower()
-        include_optional = answer in {"y", "yes"}
-
-    logger.debug("Starting interactive wizard...")
-    result = run_wizard(
-        spec=spec,
-        input_df=df,
-        prompt=prompt,
-        include_optional=include_optional,
-        include_recommended=include_recommended,
-        include_conditional=include_conditional,
-    )
-
     try:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        logger.info("Writing mapping configuration to: %s", output_path)
-        _write_mapping(output_path, result.mapping)
-        print(f"Wrote mapping to {output_path}")
-        return 0
-    except Exception as e:
-        logger.exception(f"Failed to write mapping file: {e}")
-        return 2
+        while True:
+            available = list_available_spec_versions()
+            default_spec = "v1.2"
+            if available and default_spec not in available:
+                default_spec = available[-1]
+            spec_version = (
+                args.spec
+                or prompt(
+                    f"FOCUS spec version [{default_spec}]"
+                    + (f" (available: {', '.join(available)})" if available else "")
+                    + ": "
+                ).strip()
+                or default_spec
+            )
+            try:
+                logger.debug("Loading FOCUS spec version: %s", spec_version)
+                spec = load_focus_spec(spec_version)
+                break
+            except Exception as e:
+                _eprint(f"Error: {e}")
+                if args.spec:
+                    return 2
+
+        input_path = args.input or _prompt_input_path(prompt)
+
+        # Read and validate input file
+        df = None
+        while df is None:
+            if not input_path.exists():
+                _eprint(f"Error: input file not found: {input_path}")
+                if args.input:
+                    return 2
+                input_path = _prompt_input_path(prompt)
+                continue
+
+            try:
+                logger.debug("Reading input dataset: %s", input_path)
+                df = read_table(input_path)
+            except Exception as e:
+                _eprint(f"Error: failed to read input file: {e}")
+                if args.input:
+                    return 2
+                input_path = _prompt_input_path(prompt)
+
+        output_path = args.output
+        while output_path is None:
+            with path_completion():
+                val = prompt("Output mapping YAML path [mapping.yaml]: ").strip()
+            output_path = _path(val or "mapping.yaml")
+
+        include_recommended = args.include_recommended
+        if not include_recommended:
+            answer = prompt("Include Recommended columns? [y/N] ").strip().lower()
+            include_recommended = answer in {"y", "yes"}
+
+        include_conditional = args.include_conditional
+        if not include_conditional:
+            answer = prompt("Include Conditional columns? [y/N] ").strip().lower()
+            include_conditional = answer in {"y", "yes"}
+
+        include_optional = args.include_optional
+        if not include_optional:
+            answer = prompt("Include Optional columns? [y/N] ").strip().lower()
+            include_optional = answer in {"y", "yes"}
+
+        logger.debug("Starting interactive wizard...")
+        result = run_wizard(
+            spec=spec,
+            input_df=df,
+            prompt=prompt,
+            include_optional=include_optional,
+            include_recommended=include_recommended,
+            include_conditional=include_conditional,
+        )
+
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            logger.info("Writing mapping configuration to: %s", output_path)
+            _write_mapping(output_path, result.mapping)
+            print(f"Wrote mapping to {output_path}")
+            return 0
+        except Exception as e:
+            logger.exception(f"Failed to write mapping file: {e}")
+            return 2
+    except KeyboardInterrupt:
+        print("\n\nWizard interrupted by user. Exiting...")
+        return 130  # Standard exit code for Ctrl+C
 
 
 if __name__ == "__main__":

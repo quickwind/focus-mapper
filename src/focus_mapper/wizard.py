@@ -282,8 +282,8 @@ def _prompt_for_steps(
             elif (allow_cast and choice in {"3", "round"}) or (
                 not allow_cast and choice in {"2", "round"}
             ):
-                ndigits = prompt("Round ndigits (int, default 0): ").strip()
-                steps.append({"op": "round", "ndigits": int(ndigits) if ndigits else 0})
+                ndigits = _prompt_int(prompt, "Round ndigits (int, default 0): ")
+                steps.append({"op": "round", "ndigits": ndigits if ndigits is not None else 0})
             elif (allow_cast and choice in {"4", "math"}) or (
                 not allow_cast and choice in {"3", "math"}
             ):
@@ -340,7 +340,7 @@ def _prompt_extension_columns(
 
         name = prompt("Extension column name (must start with x_): ").strip()
         if not name.startswith("x_"):
-            prompt("Name must start with x_. Skipping.\n")
+            print("Name must start with x_. Skipping.\n")
             continue
         desc = prompt("Description (optional): ").strip() or None
         col = _pick_column(columns, prompt=prompt, suggested=None)
@@ -399,7 +399,7 @@ def _pick_columns(
             break
         if col in columns and col not in picked:
             picked.append(col)
-    return picked or [suggested] if suggested else picked
+    return picked
 
 
 def _suggest_column(target: str, normalized: dict[str, str]) -> str | None:
@@ -662,7 +662,13 @@ def _prompt_choice(
     while True:
         value = prompt(text).strip().lower()
         if value == "":
-            return default if allow_empty else default
+            if allow_empty:
+                return default
+            # If empty not allowed and there's a default, use it
+            if default is not None:
+                return default
+            print("Empty input not allowed. Please enter a value.\n")
+            continue
         if value in choices:
             return value
         print(f"Invalid choice. Options: {', '.join(sorted(choices))}\n")
