@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import pandas as pd
 
 from ..errors import MappingExecutionError
 from ..spec import FocusSpec, coerce_dataframe_to_spec
 from .config import MappingConfig
 from .ops import apply_steps
+
+logger = logging.getLogger(__name__)
 
 
 def generate_focus_dataframe(
@@ -36,6 +39,16 @@ def generate_focus_dataframe(
         if rule:
             out[col] = pd.Series([pd.NA] * len(df))
             out[col] = apply_steps(df, steps=rule.steps, target=col)
+
+    # Check for unmapped targets that are not extensions
+    for rule in mapping.rules:
+        if rule.target not in spec.column_names and not rule.target.startswith("x_"):
+            logger.warning(
+                "Mapping target '%s' is not in FOCUS spec %s and does not start with 'x_'. "
+                "It will be ignored in the output.",
+                rule.target,
+                spec.version,
+            )
 
     # Append extension columns from mapping (order as provided).
     for rule in mapping.rules:
