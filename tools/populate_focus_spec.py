@@ -331,6 +331,9 @@ def _parse_columns_from_markdown(md: str) -> list[Column]:
         data_type = constraints.get("Data type", "String")
         value_format = constraints.get("Value format")
 
+        if value_format:
+            value_format = _clean_value_format(value_format)
+
         numeric_precision = None
         numeric_scale = None
         if data_type.lower() == "decimal":
@@ -409,6 +412,21 @@ def _collect_metadata_entries(
     return fetch_and_parse(metadata_path, set())
 
 
+def _clean_value_format(value_format: str | None) -> str | None:
+    if not value_format:
+        return None
+    # Clean up markdown links: [Numeric Format](#numericformat) -> Numeric Format
+    # Also handle <not specified>
+    if "<not specified>" in value_format.lower():
+        return None
+    
+    # Remove markdown link syntax [text](url) -> text
+    vf_match = re.match(r"\[(.*?)\].*", value_format)
+    if vf_match:
+        value_format = vf_match.group(1)
+    return value_format.strip()
+
+
 def _build_metadata_schema(entries: dict[str, dict[str, str]]) -> dict[str, dict]:
     def field(meta_id: str) -> dict | None:
         constraints = entries.get(meta_id)
@@ -418,7 +436,7 @@ def _build_metadata_schema(entries: dict[str, dict[str, str]]) -> dict[str, dict
             "feature_level": constraints.get("Feature level"),
             "allows_nulls": constraints.get("Allows nulls"),
             "data_type": constraints.get("Data type"),
-            "value_format": constraints.get("Value format"),
+            "value_format": _clean_value_format(constraints.get("Value format")),
         }
 
     def collect(ids: list[str]) -> dict[str, dict]:

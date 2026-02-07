@@ -26,7 +26,7 @@ def write_table(
 ) -> None:
     suffix = _suffix(path)
     if suffix == "csv":
-        df.to_csv(path, index=False)
+        df.to_csv(path, index=False, date_format="%Y-%m-%dT%H:%M:%SZ")
         return
 
     if suffix != "parquet":

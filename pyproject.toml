@@ -32,6 +32,7 @@ dependencies = [
   "pandas>=2,<3",
   "PyYAML>=5.4",
   "pyreadline3>=3.5; platform_system == 'Windows'",
+  "iso4217parse>=0.6",
 ]
 
 [project.optional-dependencies]

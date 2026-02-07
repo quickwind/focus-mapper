@@ -20,6 +20,16 @@ from .wizard_lib import (
     prompt_choice,
     prompt_datetime_format,
 )
+from .format_validators import (
+    validate_key_value_format,
+    validate_json_object_format,
+    validate_currency_format,
+    validate_datetime_format,
+    validate_numeric_format,
+    validate_integer,
+    validate_boolean,
+    validate_collection_of_strings,
+)
 
 
 @dataclass(frozen=True)
@@ -198,7 +208,13 @@ def _prompt_for_steps(
                         print(f"Value must be one of: {', '.join(allowed)}\n")
                 else:
                     while True:
-                        value = prompt("Enter constant value: ")
+                        vf_hint = ""
+                        if target.value_format:
+                            vf_hint = f" (Format: {target.value_format})"
+                        elif data_type and not is_string:
+                            vf_hint = f" (Type: {data_type})"
+
+                        value = prompt(f"Enter constant value{vf_hint}: ")
                         
                         # For non-nullable string columns, reject empty/whitespace-only
                         if is_string and not allow_null:
@@ -209,9 +225,16 @@ def _prompt_for_steps(
                                 )
                                 continue
                         
-                        # Type-specific validation (only for non-empty, non-string types)
-                        if value and not is_string and data_type:
-                            is_valid, error_msg = _validate_const_value(value, data_type)
+                        # Validation (for all types if value_format present, or non-strings if no format)
+                        should_validate = (
+                            (value and not is_string and data_type) or 
+                            (value and target.value_format)
+                        )
+                        
+                        if should_validate:
+                            is_valid, error_msg = _validate_const_value(
+                                value, data_type, target.value_format
+                            )
                             if not is_valid:
                                 print(f"Error: {error_msg}\n")
                                 continue
@@ -533,12 +556,12 @@ def _prompt_column_validation(
 
     if data_type is None:
         data_type = (
-            _prompt_choice(
-                prompt,
-                "Column type [string|decimal|datetime|json]: ",
-                {"string", "decimal", "datetime", "json"},
-                default="string",
-            )
+                _prompt_choice(
+                    prompt,
+                    "Column type [string|decimal|datetime|json|boolean]: ",
+                    {"string", "decimal", "datetime", "json", "boolean"},
+                    default="string",
+                )
             or "string"
         )
     else:
@@ -717,47 +740,61 @@ def _prompt_datetime_format(prompt: PromptFunc, text: str) -> str | None:
         return value
 
 
-def _validate_const_value(value: str, data_type: str) -> tuple[bool, str | None]:
+def _validate_const_value(
+    value: str, data_type: str, value_format: str | None = None
+) -> tuple[bool, str | None]:
     """
-    Validate a const value against its data type.
+    Validate a const value against its data type and optional value format.
     
     Returns (is_valid, error_message).
     """
     dt = data_type.strip().lower()
+    vf = value_format.strip().lower() if value_format else None
     
-    if dt == "decimal":
-        # Must be a valid number (int or float format)
+    # Check value_format specific validators first
+    if vf:
+        if "key-value" in vf or "keyvalue" in vf:
+            return validate_key_value_format(value)
+        elif "json object" in vf or "jsonobject" in vf:
+            valid, err = validate_json_object_format(value)
+            if valid and err and "Warning" in err:
+                return True, None  # Treat warnings as valid for wizard input
+            return valid, err
+        elif "currency" in vf:
+            return validate_currency_format(value)
+        elif "date/time" in vf or "datetime" in vf:
+            return validate_datetime_format(value)
+        elif "numeric" in vf:
+            return validate_numeric_format(value)
+    
+    # Check data_type validators
+    if dt == "integer":
+        return validate_integer(value)
+    elif dt == "boolean":
+        return validate_boolean(value)
+    elif dt == "decimal":
+        # Use numeric validator if strict format wasn't checked above,
+        # but basic decimal check is safer for general input unless strict format required
         try:
             Decimal(value)
-            return (True, None)
+            return True, None
         except (InvalidOperation, ValueError):
-            return (False, "Value must be a valid number (e.g., '123', '123.45', '-10.5')")
-    
+            return False, "Value must be a valid number"
     elif dt in ("date/time", "datetime"):
-        # Must be ISO8601 format (basic validation)
-        # Examples: 2024-01-15, 2024-01-15T10:30:00Z, 2024-01-15T10:30:00+00:00
-        # Try common ISO8601 formats
-        iso_formats = [
-            "%Y-%m-%d",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%dT%H:%M:%SZ",
-            "%Y-%m-%dT%H:%M:%S%z",
-            "%Y-%m-%dT%H:%M:%S.%f",
-            "%Y-%m-%dT%H:%M:%S.%fZ",
-            "%Y-%m-%dT%H:%M:%S.%f%z",
-        ]
-        
-        for fmt in iso_formats:
-            try:
-                datetime.strptime(value.replace("+00:00", "+0000"), fmt)
-                return (True, None)
-            except ValueError:
-                continue
-        
-        return (False, "Value must be in ISO8601 datetime format (e.g., '2024-01-15' or '2024-01-15T10:30:00Z')")
-    
-    # For string and other types (json), accept any value
-    return (True, None)
+        # If not covered by specific format above, require strict UTC anyway for FOCUS
+        return validate_datetime_format(value)
+    elif dt == "collection of strings":
+        return validate_collection_of_strings(value)
+    elif dt == "json":
+        # Generic JSON validation if no specific format
+        try:
+            json.loads(value)
+            return True, None
+        except json.JSONDecodeError:
+            return False, "Value must be valid JSON"
+            
+    # For string and other types, accept any value
+    return True, None
 
 
 def _norm(value: str) -> str:

@@ -7,7 +7,7 @@ from focus_mapper.spec import load_focus_spec
 from focus_mapper.validate import validate_focus_dataframe
 
 
-def test_validation_defaults_permissive_datetime() -> None:
+def test_validation_defaults_reject_non_iso_datetime() -> None:
     spec = load_focus_spec("v1.2")
     df = pd.DataFrame(
         {
@@ -21,7 +21,7 @@ def test_validation_defaults_permissive_datetime() -> None:
     )
 
     report = validate_focus_dataframe(df, spec=spec, mapping=mapping)
-    assert not any(f.check_id == "focus.datetime_format" for f in report.findings)
+    assert any(f.check_id == "focus.datetime_format" for f in report.findings)
 
 
 def test_validation_strict_datetime_format_rejects_non_iso() -> None:

@@ -9,7 +9,7 @@
       "name": "AvailabilityZone",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -20,7 +20,7 @@
       "name": "BilledCost",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Numeric Format](#numericformat)"
+      "value_format": "Numeric Format"
     },
     {
       "allowed_values": null,
@@ -31,7 +31,7 @@
       "name": "BillingAccountId",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -42,7 +42,7 @@
       "name": "BillingAccountName",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -53,7 +53,7 @@
       "name": "BillingCurrency",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Currency Code Format](#currencycodeformat)"
+      "value_format": "Currency Code Format"
     },
     {
       "allowed_values": null,
@@ -64,7 +64,7 @@
       "name": "BillingPeriodEnd",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Date/Time Format](#date/timeformat)"
+      "value_format": "Date/Time Format"
     },
     {
       "allowed_values": null,
@@ -75,7 +75,7 @@
       "name": "BillingPeriodStart",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Date/Time Format](#date/timeformat)"
+      "value_format": "Date/Time Format"
     },
     {
       "allowed_values": null,
@@ -86,7 +86,7 @@
       "name": "CapacityReservationId",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": [
@@ -141,7 +141,7 @@
       "name": "ChargeDescription",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": [
@@ -167,7 +167,7 @@
       "name": "ChargePeriodEnd",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Date/Time Format](#date/timeformat)"
+      "value_format": "Date/Time Format"
     },
     {
       "allowed_values": null,
@@ -178,7 +178,7 @@
       "name": "ChargePeriodStart",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Date/Time Format](#date/timeformat)"
+      "value_format": "Date/Time Format"
     },
     {
       "allowed_values": [
@@ -203,7 +203,7 @@
       "name": "CommitmentDiscountId",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -214,7 +214,7 @@
       "name": "CommitmentDiscountName",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -225,7 +225,7 @@
       "name": "CommitmentDiscountQuantity",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Numeric Format](#numericformat)"
+      "value_format": "Numeric Format"
     },
     {
       "allowed_values": [
@@ -250,7 +250,7 @@
       "name": "CommitmentDiscountType",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -261,7 +261,7 @@
       "name": "CommitmentDiscountUnit",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Unit Format](#unitformat)"
+      "value_format": "Unit Format"
     },
     {
       "allowed_values": null,
@@ -272,7 +272,7 @@
       "name": "ConsumedQuantity",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Numeric Format](#numericformat)"
+      "value_format": "Numeric Format"
     },
     {
       "allowed_values": null,
@@ -283,7 +283,7 @@
       "name": "ConsumedUnit",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Unit Format](#unitformat) recommended"
+      "value_format": "Unit Format"
     },
     {
       "allowed_values": null,
@@ -294,7 +294,7 @@
       "name": "ContractedCost",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Numeric Format](#numericformat)"
+      "value_format": "Numeric Format"
     },
     {
       "allowed_values": null,
@@ -305,7 +305,7 @@
       "name": "ContractedUnitPrice",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Numeric Format](#numericformat)"
+      "value_format": "Numeric Format"
     },
     {
       "allowed_values": null,
@@ -316,7 +316,7 @@
       "name": "EffectiveCost",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Numeric Format](#numericformat)"
+      "value_format": "Numeric Format"
     },
     {
       "allowed_values": null,
@@ -327,7 +327,7 @@
       "name": "InvoiceIssuerName",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -338,7 +338,7 @@
       "name": "ListCost",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Numeric Format](#numericformat)"
+      "value_format": "Numeric Format"
     },
     {
       "allowed_values": null,
@@ -349,7 +349,7 @@
       "name": "ListUnitPrice",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Numeric Format](#numericformat)"
+      "value_format": "Numeric Format"
     },
     {
       "allowed_values": [
@@ -376,7 +376,7 @@
       "name": "PricingQuantity",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Numeric Format](#numericformat)"
+      "value_format": "Numeric Format"
     },
     {
       "allowed_values": null,
@@ -387,7 +387,7 @@
       "name": "PricingUnit",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Unit Format](#unitformat)"
+      "value_format": "Unit Format"
     },
     {
       "allowed_values": null,
@@ -398,7 +398,7 @@
       "name": "ProviderName",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -409,7 +409,7 @@
       "name": "PublisherName",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -420,7 +420,7 @@
       "name": "RegionId",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -431,7 +431,7 @@
       "name": "RegionName",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -442,7 +442,7 @@
       "name": "ResourceId",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -453,7 +453,7 @@
       "name": "ResourceName",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -464,7 +464,7 @@
       "name": "ResourceType",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": [
@@ -506,29 +506,92 @@
       "name": "ServiceName",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": [
-        "AI and Machine Learning",
-        "Analytics",
-        "Business Applications",
-        "Compute",
-        "Databases",
-        "Developer Tools",
-        "Identity",
-        "Integration",
-        "Internet of Things",
-        "Management and Governance",
-        "Media",
-        "Migration",
-        "Mobile",
-        "Multicloud",
-        "Networking",
-        "Security",
-        "Storage",
-        "Web",
-        "Other"
+        "AI Platforms",
+        "Bots",
+        "Generative AI",
+        "Machine Learning",
+        "Natural Language Processing",
+        "Other (AI and Machine Learning)",
+        "Analytics Platforms",
+        "Business Intelligence",
+        "Data Processing",
+        "Search",
+        "Streaming Analytics",
+        "Other (Analytics)",
+        "Productivity and Collaboration",
+        "Other (Business Applications)",
+        "Containers",
+        "End User Computing",
+        "Quantum Compute",
+        "Serverless Compute",
+        "Virtual Machines",
+        "Other (Compute)",
+        "Caching",
+        "Data Warehouses",
+        "Ledger Databases",
+        "NoSQL Databases",
+        "Relational Databases",
+        "Time Series Databases",
+        "Other (Databases)",
+        "Developer Platforms",
+        "Continuous Integration and Deployment",
+        "Development Environments",
+        "Source Code Management",
+        "Quality Assurance",
+        "Other (Developer Tools)",
+        "Identity and Access Management",
+        "Other (Identity)",
+        "API Management",
+        "Messaging",
+        "Workflow Orchestration",
+        "Other (Integration)",
+        "IoT Analytics",
+        "IoT Platforms",
+        "Other (Internet of Things)",
+        "Architecture",
+        "Compliance",
+        "Cost Management",
+        "Data Governance",
+        "Disaster Recovery",
+        "Endpoint Management",
+        "Observability",
+        "Support",
+        "Other (Management and Governance)",
+        "Content Creation",
+        "Gaming",
+        "Media Streaming",
+        "Mixed Reality",
+        "Other (Media)",
+        "Data Migration",
+        "Resource Migration",
+        "Other (Migration)",
+        "Other (Mobile)",
+        "Multicloud Integration",
+        "Other (Multicloud)",
+        "Application Networking",
+        "Content Delivery",
+        "Network Connectivity",
+        "Network Infrastructure",
+        "Network Routing",
+        "Network Security",
+        "Other (Networking)",
+        "Secret Management",
+        "Security Posture Management",
+        "Threat Detection and Response",
+        "Other (Security)",
+        "Backup Storage",
+        "Block Storage",
+        "File Storage",
+        "Object Storage",
+        "Storage Platforms",
+        "Other (Storage)",
+        "Application Platforms",
+        "Other (Web)",
+        "Other (Other)"
       ],
       "allows_nulls": false,
       "data_type": "String",
@@ -548,7 +611,7 @@
       "name": "SkuId",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -559,7 +622,7 @@
       "name": "SkuMeter",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -570,7 +633,7 @@
       "name": "SkuPriceDetails",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Key-Value Format](#key-valueformat)"
+      "value_format": "Key-Value Format"
     },
     {
       "allowed_values": null,
@@ -581,7 +644,7 @@
       "name": "SkuPriceId",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -592,7 +655,7 @@
       "name": "SubAccountId",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -603,7 +666,7 @@
       "name": "SubAccountName",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "\\<not specified>"
+      "value_format": null
     },
     {
       "allowed_values": null,
@@ -614,7 +677,7 @@
       "name": "Tags",
       "numeric_precision": null,
       "numeric_scale": null,
-      "value_format": "[Key-Value Format](#key-valueformat)"
+      "value_format": "Key-Value Format"
     }
   ],
   "metadata": {
@@ -623,13 +686,13 @@
         "allows_nulls": "False",
         "data_type": "String",
         "feature_level": "Mandatory",
-        "value_format": "\\<not specified>"
+        "value_format": null
       },
       "__self__": {
         "allows_nulls": "False",
         "data_type": "String",
         "feature_level": "Mandatory",
-        "value_format": "\\<not specified>"
+        "value_format": null
       }
     },
     "Schema": {
@@ -638,25 +701,25 @@
           "allows_nulls": "False",
           "data_type": "String",
           "feature_level": "Mandatory",
-          "value_format": "\\<not specified>"
+          "value_format": null
         },
         "DataType": {
           "allows_nulls": "False",
           "data_type": "String",
           "feature_level": "Mandatory",
-          "value_format": "\\<not specified>"
+          "value_format": null
         },
         "NumberScale": {
           "allows_nulls": "False",
           "data_type": "Integer",
           "feature_level": "Conditional",
-          "value_format": "[Numeric Format](#numericformat)"
+          "value_format": "Numeric Format"
         },
         "NumericPrecision": {
           "allows_nulls": "False",
           "data_type": "Integer",
           "feature_level": "Conditional",
-          "value_format": "[Numeric Format](#numericformat)"
+          "value_format": "Numeric Format"
         },
         "ProviderTagPrefixes": {
           "allows_nulls": "False",
@@ -668,20 +731,20 @@
           "allows_nulls": "False",
           "data_type": "String",
           "feature_level": "Conditional",
-          "value_format": "\\<not specified>"
+          "value_format": null
         },
         "StringMaxLength": {
           "allows_nulls": "False",
           "data_type": "Integer",
           "feature_level": "Conditional",
-          "value_format": "[Numeric Format](#numericformat)"
+          "value_format": "Numeric Format"
         }
       },
       "CreationDate": {
         "allows_nulls": "False",
         "data_type": "Date/Time",
         "feature_level": "Mandatory",
-        "value_format": "[Date/Time Format](#date/timeformat)"
+        "value_format": "Date/Time Format"
       },
       "FocusVersion": {
         "allows_nulls": "False",

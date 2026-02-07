@@ -199,6 +199,7 @@ def test_unknown_column_warning_and_currency_format() -> None:
                 feature_level="mandatory",
                 allows_nulls=False,
                 data_type="String",
+                value_format="Currency Format",
             )
         ]
     )
@@ -207,3 +208,23 @@ def test_unknown_column_warning_and_currency_format() -> None:
     # one error for currency format + one warn for unknown column
     assert report.summary.errors == 1
     assert report.summary.warnings == 1
+
+
+def test_boolean_type_validation() -> None:
+    spec = _spec(
+        [
+            FocusColumnSpec(
+                name="Deprecated",
+                feature_level="mandatory",
+                allows_nulls=False,
+                data_type="Boolean",
+            )
+        ]
+    )
+    # "true" and "False" are valid (case-insensitive). "Yes" is invalid.
+    df = pd.DataFrame({"Deprecated": ["true", "False", "Yes"]})
+    report = validate_focus_dataframe(df, spec=spec)
+    assert report.summary.errors == 1
+    finding = next(f for f in report.findings if f.check_id == "focus.boolean_format")
+    assert "Invalid Boolean format" in finding.message
+    assert "Yes" in str(finding.sample_values)

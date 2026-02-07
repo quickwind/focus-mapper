@@ -2,14 +2,27 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import numpy as np
 
 from .spec import FocusSpec
 from .mapping.config import MappingConfig
+from .format_validators import (
+    validate_key_value_format,
+    validate_json_object_format,
+    validate_currency_format,
+    validate_datetime_format,
+    validate_numeric_format,
+    validate_unit_format,
+    validate_integer,
+    validate_boolean,
+    validate_collection_of_strings,
+)
 
 
 @dataclass(frozen=True)
@@ -232,6 +245,61 @@ def validate_focus_dataframe(
             if isinstance(eff.get("json"), dict):
                 obj_only = bool(eff.get("json", {}).get("object_only"))
             _validate_json(findings, s, col.name, object_only=obj_only)
+        
+        elif dtype == "boolean":
+            for idx, val in s.dropna().items():
+                if isinstance(val, (bool, np.bool_)):
+                    continue
+                val_str = str(val) if not isinstance(val, str) else val
+                valid, err = validate_boolean(val_str)
+                if not valid:
+                    findings.append(
+                        ValidationFinding(
+                            check_id="focus.boolean_format",
+                            severity="ERROR",
+                            message=f"Invalid Boolean format: {err}",
+                            column=col.name,
+                            failing_rows=1,
+                            sample_values=[val_str],
+                        )
+                    )
+                    break
+        
+        elif dtype == "integer":
+            for idx, val in s.dropna().items():
+                if isinstance(val, int):
+                    continue
+                val_str = str(val) if not isinstance(val, str) else val
+                valid, err = validate_integer(val_str)
+                if not valid:
+                    findings.append(
+                        ValidationFinding(
+                            check_id="focus.integer_format",
+                            severity="ERROR",
+                            message=f"Invalid Integer format: {err}",
+                            column=col.name,
+                            failing_rows=1,
+                            sample_values=[val_str],
+                        )
+                    )
+                    break
+        
+        elif "collection" in dtype:
+            for idx, val in s.dropna().items():
+                # Value could be a list (from JSON parsing) or a string
+                valid, err = validate_collection_of_strings(val)
+                if not valid:
+                    findings.append(
+                        ValidationFinding(
+                            check_id="focus.collection_format",
+                            severity="ERROR",
+                            message=f"Invalid Collection format: {err}",
+                            column=col.name,
+                            failing_rows=1,
+                            sample_values=[str(val)[:100]],
+                        )
+                    )
+                    break
 
     # 5) Extension columns: must start with x_
     for name in df.columns:
@@ -251,24 +319,167 @@ def validate_focus_dataframe(
             )
         )
 
-    # 6) Basic currency code format check (ISO4217-like)
-    if "BillingCurrency" in df.columns:
-        s = df["BillingCurrency"]
-        if isinstance(s, pd.Series):
-            s_str = s.astype("string")
-            mask = (~s_str.isna()) & (~s_str.str.fullmatch(r"[A-Z]{3}"))
-            failing = int(mask.sum())
-            if failing:
-                findings.append(
-                    ValidationFinding(
-                        check_id="focus.currency_format",
-                        severity="ERROR",
-                        message="BillingCurrency must be a 3-letter uppercase ISO 4217 code",
-                        column="BillingCurrency",
-                        failing_rows=failing,
-                        sample_values=_sample_values(s[mask]),
+    # 6) Value format validation based on column's value_format attribute
+    for col in spec.columns:
+        if col.name not in df.columns:
+            continue
+        if not col.value_format:
+            continue
+        
+        s = df[col.name]
+        if not isinstance(s, pd.Series):
+            continue
+        
+        vf = col.value_format.lower()
+        
+        # Key-Value Format
+        if "key-value" in vf or "keyvalue" in vf:
+            for idx, val in s.dropna().items():
+                val_str = str(val) if not isinstance(val, str) else val
+                valid, err = validate_key_value_format(val_str)
+                if not valid:
+                    findings.append(
+                        ValidationFinding(
+                            check_id="focus.key_value_format",
+                            severity="ERROR",
+                            message=f"Invalid Key-Value format: {err}",
+                            column=col.name,
+                            failing_rows=1,
+                            sample_values=[val_str[:100]],
+                        )
                     )
-                )
+                    break  # Report first error only
+        
+        # JSON Object Format (v1.3+)
+        elif "json object" in vf or "jsonobject" in vf:
+            for idx, val in s.dropna().items():
+                val_str = str(val) if not isinstance(val, str) else val
+                valid, err = validate_json_object_format(val_str)
+                if not valid:
+                    findings.append(
+                        ValidationFinding(
+                            check_id="focus.json_object_format",
+                            severity="ERROR",
+                            message=f"Invalid JSON Object format: {err}",
+                            column=col.name,
+                            failing_rows=1,
+                            sample_values=[val_str[:100]],
+                        )
+                    )
+                    break
+                elif err and "Warning" in err:
+                    # Soft warning for depth exceeding 3
+                    findings.append(
+                        ValidationFinding(
+                            check_id="focus.json_object_depth",
+                            severity="WARN",
+                            message=err,
+                            column=col.name,
+                        )
+                    )
+                    break
+        
+        # Currency Format
+        elif "currency" in vf:
+            for idx, val in s.dropna().items():
+                val_str = str(val) if not isinstance(val, str) else val
+                valid, err = validate_currency_format(val_str)
+                if not valid:
+                    findings.append(
+                        ValidationFinding(
+                            check_id="focus.currency_format",
+                            severity="ERROR",
+                            message=f"Invalid currency format: {err}",
+                            column=col.name,
+                            failing_rows=1,
+                            sample_values=[val_str],
+                        )
+                    )
+                    break
+        
+        # Date/Time Format
+        elif "date/time" in vf or "datetime" in vf:
+            for idx, val in s.dropna().items():
+                if isinstance(val, (datetime, pd.Timestamp)):
+                    # If it's already a datetime object, just check it's timezone-aware and UTC
+                    tz = val.tzinfo
+                    if tz is None:
+                        findings.append(
+                            ValidationFinding(
+                                check_id="focus.datetime_tz",
+                                severity="ERROR",
+                                message="Datetime must be timezone-aware (UTC)",
+                                column=col.name,
+                                failing_rows=1,
+                                sample_values=[str(val)],
+                            )
+                        )
+                        break
+                    
+                    # Check if it's UTC (offset 0)
+                    offset = val.utcoffset()
+                    if offset is None or offset.total_seconds() != 0:
+                        findings.append(
+                            ValidationFinding(
+                                check_id="focus.datetime_utc",
+                                severity="ERROR",
+                                message=f"Datetime must be UTC, got offset {offset}",
+                                column=col.name,
+                                failing_rows=1,
+                                sample_values=[str(val)],
+                            )
+                        )
+                        break
+                    continue
+
+                val_str = str(val) if not isinstance(val, str) else val
+                valid, err = validate_datetime_format(val_str)
+                if not valid:
+                    findings.append(
+                        ValidationFinding(
+                            check_id="focus.datetime_format",
+                            severity="ERROR",
+                            message=f"Invalid datetime format: {err}",
+                            column=col.name,
+                            failing_rows=1,
+                            sample_values=[val_str],
+                        )
+                    )
+                    break
+        
+        # Numeric Format
+        elif "numeric" in vf:
+            for idx, val in s.dropna().items():
+                val_str = str(val) if not isinstance(val, str) else val
+                valid, err = validate_numeric_format(val_str)
+                if not valid:
+                    findings.append(
+                        ValidationFinding(
+                            check_id="focus.numeric_format",
+                            severity="ERROR",
+                            message=f"Invalid numeric format: {err}",
+                            column=col.name,
+                            failing_rows=1,
+                            sample_values=[val_str],
+                        )
+                    )
+                    break
+        
+        # Unit Format (soft validation - warnings only)
+        elif "unit" in vf:
+            for idx, val in s.dropna().items():
+                val_str = str(val) if not isinstance(val, str) else val
+                valid, err = validate_unit_format(val_str)
+                if err and "Warning" in err:
+                    findings.append(
+                        ValidationFinding(
+                            check_id="focus.unit_format",
+                            severity="WARN",
+                            message=err,
+                            column=col.name,
+                        )
+                    )
+                    break
 
     errors = sum(1 for f in findings if f.severity == "ERROR")
     warnings = sum(1 for f in findings if f.severity == "WARN")
