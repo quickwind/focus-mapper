@@ -1,4 +1,4 @@
-name: Publish
+name: Publish to PyPI
 
 on:
   push:
@@ -6,42 +6,49 @@ on:
       - "v*"
 
 jobs:
-  build-and-publish:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Build
-        run: |
-          python -m pip install -U pip build setuptools wheel
-          python -m build --no-isolation
+
+      - name: Install build dependencies
+        run: python -m pip install -U pip build setuptools wheel
+
+      - name: Build package
+        run: python -m build
+
       - name: Check dist metadata
         run: |
           python -m pip install -U twine
           python -m twine check dist/*
-      - name: Show dist metadata (debug)
-        run: |
-          ls -la dist
-          python - <<'PY'
-          import zipfile
-          from pathlib import Path
 
-          wheels = list(Path("dist").glob("*.whl"))
-          if not wheels:
-              raise SystemExit("No wheel found in dist/")
-          wheel = wheels[0]
-          with zipfile.ZipFile(wheel) as zf:
-              meta = [n for n in zf.namelist() if n.endswith("METADATA")]
-              if not meta:
-                  raise SystemExit("No METADATA in wheel")
-              data = zf.read(meta[0]).decode("utf-8", errors="replace")
-              print("---- METADATA HEAD ----")
-              print("\n".join(data.splitlines()[:20]))
-          PY
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.10.2
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          verify-metadata: false
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # Required for Trusted Publishers (OIDC)
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # For Trusted Publishers, no password needed!
+        # If using API token instead, uncomment below:
+        # with:
+        #   password: ${{ secrets.PYPI_API_TOKEN }}
