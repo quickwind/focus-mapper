@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "focus-mapper"
 version = "0.1.0"
-description = "FOCUS report generator (YAML mapping + validator)"
+description = "FOCUS report mapping tool"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
   { name = "Wallace Wei", email = "wallacewei@live.cn" },
 ]
 license = { file = "LICENSE" }
-keywords = ["FinOps", "FOCUS", "cost", "billing", "mapping", "ETL"]
+keywords = ["FinOps", "FOCUS", "cost", "billing", "mapping"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
@@ -27,7 +27,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries",
   "Topic :: Utilities",
 ]
-urls = { "Homepage" = "https://github.com/wallacewei/focus-mapper", "Repository" = "https://github.com/wallacewei/focus-mapper" }
+urls = { "Homepage" = "https://github.com/quickwind/focus-mapper", "Repository" = "https://github.com/quickwind/focus-mapper" }
 dependencies = [
   "pandas>=2,<3",
   "PyYAML>=5.4",
