@@ -111,15 +111,21 @@ def main(argv: list[str] | None = None) -> int:
             default_spec = "v1.2"
             if available and default_spec not in available:
                 default_spec = available[-1]
-            spec_version = (
-                args.spec
-                or prompt(
-                    f"FOCUS spec version [{default_spec}]"
-                    + (f" (available: {', '.join(available)})" if available else "")
-                    + ": "
-                ).strip()
-                or default_spec
-            )
+            spec_version = args.spec
+            if not spec_version:
+                 if available:
+                     options = [(v, v) for v in available]
+                     spec_version = prompt_menu(
+                         prompt,
+                         "Select FOCUS spec version:",
+                         options,
+                         default=default_spec,
+                     )
+                 else:
+                     spec_version = (
+                         prompt(f"FOCUS spec version [{default_spec}]: ").strip()
+                         or default_spec
+                     )
             try:
                 logger.debug("Loading FOCUS spec version: %s", spec_version)
                 spec = load_focus_spec(spec_version)

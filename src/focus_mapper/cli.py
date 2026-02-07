@@ -15,6 +15,7 @@ from .mapping.executor import generate_focus_dataframe
 from .metadata import build_sidecar_metadata, write_sidecar_metadata
 from .spec import load_focus_spec, list_available_spec_versions
 from .validate import validate_focus_dataframe, write_validation_report
+from .wizard_lib import prompt_menu
 
 logger = logging.getLogger("focus_mapper")
 
@@ -90,15 +91,20 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     default_spec = "v1.2"
     if available and default_spec not in available:
         default_spec = available[-1]
-    spec_version = (
-        getattr(args, "spec", None)
-        or _prompt(
-            f"FOCUS spec version [{default_spec}]"
-            + (f" (available: {', '.join(available)})" if available else "")
-            + ": "
-        ).strip()
-        or default_spec
-    )
+    spec_version = getattr(args, "spec", None)
+    if not spec_version:
+        if available:
+            options = [(v, v) for v in available]
+            spec_version = prompt_menu(
+                _prompt,
+                "Select FOCUS spec version:",
+                options,
+                default=default_spec,
+            )
+        else:
+            spec_version = (
+                _prompt(f"FOCUS spec version [{default_spec}]: ").strip() or default_spec
+            )
     logger.debug("Loading FOCUS spec version: %s", spec_version)
     spec = load_focus_spec(spec_version)
 
