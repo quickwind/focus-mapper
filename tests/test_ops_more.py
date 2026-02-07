@@ -120,3 +120,44 @@ def test_apply_steps_pandas_expr_invalid_cases() -> None:
             steps=[{"op": "pandas_expr", "expr": "[1,2,3]"}],
             target="X",
         )
+
+def test_null_operation() -> None:
+    """Verify that null operation creates a series of null values."""
+    df = pd.DataFrame({
+        "col1": [1, 2, 3],
+        "col2": ["a", "b", "c"],
+    })
+    
+    steps = [{"op": "null"}]
+    result = apply_steps(df, steps=steps, target="test_target")
+    
+    # Should have same length as df
+    assert len(result) == 3
+    
+    # All values should be null/NA
+    assert result.isna().all()
+
+
+def test_const_with_empty_string() -> None:
+    """Verify that const operation can handle empty strings explicitly."""
+    df = pd.DataFrame({"col1": [1, 2, 3]})
+    
+    # Empty string should be preserved (not converted to null)
+    steps = [{"op": "const", "value": ""}]
+    result = apply_steps(df, steps=steps, target="test_target")
+    
+    assert len(result) == 3
+    assert (result == "").all()
+    assert not result.isna().any()
+
+
+def test_const_vs_null() -> None:
+    """Verify const and null produce different results."""
+    df = pd.DataFrame({"col1": [1, 2, 3]})
+    
+    const_result = apply_steps(df, steps=[{"op": "const", "value": ""}], target="test")
+    null_result = apply_steps(df, steps=[{"op": "null"}], target="test")
+    
+    # const with empty string should be different from null
+    assert not (const_result.isna().all())
+    assert null_result.isna().all()
