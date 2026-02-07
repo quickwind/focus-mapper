@@ -71,6 +71,7 @@ def generate(
     mapping: MappingConfig | Path | str,
     *,
     spec_version: str | None = None,
+    spec_dir: Path | str | None = None,
     output_path: Path | str | None = None,
     write_output: bool = True,
     write_metadata: bool = True,
@@ -91,6 +92,8 @@ def generate(
         mapping: Mapping configuration as MappingConfig or path to YAML file.
         spec_version: FOCUS spec version (e.g., "v1.2", "v1.3").
                       If None, uses version from mapping config.
+        spec_dir: Optional directory containing spec JSON files.
+                  Overrides bundled specs. Falls back to FOCUS_SPEC_DIR env var.
         output_path: Path for output file. Required if write_output=True.
         write_output: Whether to write the output DataFrame to file.
         write_metadata: Whether to write sidecar metadata JSON.
@@ -123,7 +126,7 @@ def generate(
 
     # Resolve spec version
     version = spec_version or mapping.spec_version
-    spec = load_focus_spec(version)
+    spec = load_focus_spec(version, spec_dir=spec_dir)
 
     # Resolve input data
     if isinstance(input_data, (str, Path)):
@@ -195,6 +198,7 @@ def validate(
     data: pd.DataFrame | Path | str,
     *,
     spec_version: str = "v1.2",
+    spec_dir: Path | str | None = None,
     mapping: MappingConfig | Path | str | None = None,
     output_path: Path | str | None = None,
     write_report: bool = False,
@@ -207,6 +211,7 @@ def validate(
     Args:
         data: Data to validate as DataFrame or path to CSV/Parquet file.
         spec_version: FOCUS spec version to validate against.
+        spec_dir: Optional directory containing spec JSON files.
         mapping: Optional mapping config for validation rule overrides.
         output_path: Path for validation report JSON. Required if write_report=True.
         write_report: Whether to write the validation report to file.
@@ -225,7 +230,7 @@ def validate(
         ...             print(f"Error in {f.column}: {f.message}")
     """
     # Load spec
-    spec = load_focus_spec(spec_version)
+    spec = load_focus_spec(spec_version, spec_dir=spec_dir)
 
     # Resolve mapping if provided
     if isinstance(mapping, (str, Path)):
@@ -253,6 +258,7 @@ def validate_mapping(
     mapping: MappingConfig | Path | str,
     *,
     spec_version: str | None = None,
+    spec_dir: Path | str | None = None,
     check_column_targets: bool = True,
     check_op_syntax: bool = True,
 ) -> MappingValidationResult:
@@ -266,6 +272,7 @@ def validate_mapping(
         mapping: Mapping config as MappingConfig or path to YAML file.
         spec_version: FOCUS spec version for column validation.
                       If None, uses version from mapping config.
+        spec_dir: Optional directory containing spec JSON files.
         check_column_targets: Validate target columns exist in spec.
         check_op_syntax: Validate operation syntax and parameters.
 
@@ -300,7 +307,7 @@ def validate_mapping(
     # Determine spec version
     version = spec_version or parsed_mapping.spec_version
     try:
-        spec = load_focus_spec(version)
+        spec = load_focus_spec(version, spec_dir=spec_dir)
     except Exception as e:
         errors.append(f"Failed to load spec version '{version}': {e}")
         return MappingValidationResult(

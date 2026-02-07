@@ -74,6 +74,12 @@ def _build_parser() -> argparse.ArgumentParser:
     gen.add_argument(
         "--data-generator-version", default=__version__, help="Data generator version"
     )
+    gen.add_argument(
+        "--spec-dir",
+        type=_path,
+        help="Directory containing spec JSON files (overrides bundled specs). "
+             "Also reads from FOCUS_SPEC_DIR env var if not set.",
+    )
 
     val = sub.add_parser("validate", help="Validate an existing FOCUS dataset")
     val.add_argument("--spec", help="FOCUS spec version (default: v1.2)")
@@ -81,6 +87,12 @@ def _build_parser() -> argparse.ArgumentParser:
     val.add_argument("--out", type=_path, help="Validation report JSON output path")
     val.add_argument(
         "--report-format", default="json", choices=["json"], help="Report format"
+    )
+    val.add_argument(
+        "--spec-dir",
+        type=_path,
+        help="Directory containing spec JSON files (overrides bundled specs). "
+             "Also reads from FOCUS_SPEC_DIR env var if not set.",
     )
 
     return p
@@ -97,8 +109,9 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     mapping = load_mapping_config(mapping_path)
 
     spec_version = getattr(args, "spec", None) or mapping.spec_version
+    spec_dir = getattr(args, "spec_dir", None)
     logger.debug("Loading FOCUS spec version: %s", spec_version)
-    spec = load_focus_spec(spec_version)
+    spec = load_focus_spec(spec_version, spec_dir=spec_dir)
 
     input_path = getattr(args, "input", None)
     while input_path is None:
@@ -216,7 +229,8 @@ def _cmd_validate(args: argparse.Namespace) -> int:
                 _prompt(f"FOCUS spec version [{default_spec}]: ").strip() or default_spec
             )
     logger.debug("Loading FOCUS spec version: %s", spec_version)
-    spec = load_focus_spec(spec_version)
+    spec_dir = getattr(args, "spec_dir", None)
+    spec = load_focus_spec(spec_version, spec_dir=spec_dir)
 
     input_path = getattr(args, "input", None)
     while input_path is None:

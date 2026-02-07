@@ -674,8 +674,9 @@ def _dest_dir(version: str) -> Path:
 
 
 def _dest_file(version: str) -> Path:
-    normalized = version.lower().removeprefix("v").replace(".", "_")
-    return _dest_dir(version) / f"focus_v{normalized}.json"
+    normalized = version.lower().removeprefix("v")
+    normalized_dir = normalized.replace(".", "_")
+    return _dest_dir(version) / f"focus_spec_v{normalized}.json"
 
 
 def main(argv: list[str] | None = None) -> int:

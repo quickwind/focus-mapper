@@ -129,26 +129,70 @@ def _coerce_json(series: pd.Series) -> pd.Series:
     return series.map(conv)
 
 
-def load_focus_spec(version: str) -> FocusSpec:
-    """Loads a FOCUS specification from a versioned JSON artifact."""
+def load_focus_spec(version: str, *, spec_dir: str | _Path | None = None) -> FocusSpec:
+    """
+    Loads a FOCUS specification from a versioned JSON artifact.
+
+    Args:
+        version: Spec version (e.g., "v1.2", "1.3")
+        spec_dir: Optional directory containing spec JSON files.
+                  Files should be named focus_v{x}_{y}.json (e.g., focus_v1_2.json).
+                  If not provided, checks FOCUS_SPEC_DIR env var, then falls back
+                  to bundled specs.
+
+    The spec directory can contain multiple version files to override multiple
+    versions at once.
+
+    Returns:
+        FocusSpec object
+
+    Raises:
+        SpecError: If spec version is not found or invalid
+    """
+    import os
+
     normalized = version.lower().removeprefix("v")
     mod = normalized.replace(".", "_")
+    filename = f"focus_spec_v{normalized}.json"
 
-    try:
-        pkg = f"focus_mapper.specs.v{mod}"
-        with (
-            resources.files(pkg)
-            .joinpath(f"focus_v{mod}.json")
-            .open("r", encoding="utf-8") as f
-        ):
-            raw = json.load(f)
-    except FileNotFoundError as e:
-        raise SpecError(
-            "Missing embedded spec artifact. Run tools/populate_focus_spec.py "
-            f"--version {normalized} to generate focus_v{mod}.json."
-        ) from e
-    except ModuleNotFoundError as e:
-        raise SpecError(f"Unsupported spec version: {version}") from e
+    raw: dict[str, Any] | None = None
+
+    # Priority 1: Explicit spec_dir parameter
+    if spec_dir is not None:
+        spec_path = _Path(spec_dir) / filename
+        if spec_path.exists():
+            with open(spec_path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+
+    # Priority 2: FOCUS_SPEC_DIR environment variable
+    if raw is None:
+        env_dir = os.environ.get("FOCUS_SPEC_DIR")
+        if env_dir:
+            spec_path = _Path(env_dir) / filename
+            if spec_path.exists():
+                with open(spec_path, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+
+    # Priority 3: Bundled specs
+    if raw is None:
+        try:
+            pkg = f"focus_mapper.specs.v{mod}"
+            with (
+                resources.files(pkg)
+                .joinpath(filename)
+                .open("r", encoding="utf-8") as f
+            ):
+                raw = json.load(f)
+        except FileNotFoundError as e:
+            raise SpecError(
+                "Missing embedded spec artifact. Run tools/populate_focus_spec.py "
+                f"--version {normalized} to generate {filename}."
+            ) from e
+        except ModuleNotFoundError as e:
+            raise SpecError(f"Unsupported spec version: {version}") from e
+
+    if raw is None:
+        raise SpecError(f"Spec version {version} not found in spec_dir or bundled specs")
 
     cols: list[FocusColumnSpec] = []
     for item in raw["columns"]:
@@ -185,7 +229,9 @@ def list_available_spec_versions() -> list[str]:
         if not child.name.startswith("v"):
             continue
         mod = child.name[1:]
-        json_path = child / f"focus_v{mod}.json"
+        #Check for the new filename format
+        dot_version = mod.replace("_", ".")
+        json_path = child / f"focus_spec_v{dot_version}.json"
         if json_path.exists():
-            versions.append("v" + mod.replace("_", "."))
+            versions.append("v" + dot_version)
     return sorted(versions)

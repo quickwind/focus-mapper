@@ -42,6 +42,35 @@ python tools/populate_focus_spec.py --version 1.2 --ref main
 
 Then use `--spec v1.2` (or `v1.1`, `v1.3`) in the CLI.
 
+## External Spec Directory
+
+You can override bundled specs with custom JSON files for testing or development:
+
+**Directory format:**
+```
+/path/to/specs/
+├── focus_spec_v1.1.json    # Override v1.1
+├── focus_spec_v1.2.json    # Override v1.2
+└── focus_spec_v1.3.json    # Override v1.3 (use as many as needed)
+```
+
+**Usage options (in priority order):**
+
+```bash
+# 1. CLI flag (highest priority)
+focus-mapper generate --spec v1.3 --spec-dir /path/to/specs ...
+
+# 2. Environment variable
+export FOCUS_SPEC_DIR=/path/to/specs
+focus-mapper generate --spec v1.3 ...
+
+# 3. Library API
+from focus_mapper import load_focus_spec
+spec = load_focus_spec("v1.3", spec_dir="/path/to/specs")
+```
+
+If a version isn't found in the external directory, it falls back to bundled specs.
+
 ## What You Need
 
 - A flat input table (CSV or Parquet).
