@@ -3,6 +3,7 @@ test/
 
 .DS_Store
 .sisyphus/
+.agent/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
