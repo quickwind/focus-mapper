@@ -12,6 +12,7 @@ from .io import read_table
 from .mapping.config import MappingConfig
 from .spec import load_focus_spec, list_available_spec_versions
 from .wizard import run_wizard, PromptFunc
+from .wizard_lib import prompt_menu
 
 logger = logging.getLogger("focus_mapper.wizard")
 
