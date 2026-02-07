@@ -95,7 +95,7 @@ mappings:
   ServiceSubcategory:
     steps:
       - op: const
-        value: "Compute"
+        value: "Quantum Compute"
 
   ServiceName:
     steps:
