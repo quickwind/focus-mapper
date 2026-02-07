@@ -51,7 +51,7 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Set the logging level (default: INFO)",
     )
-    p.add_argument("--spec", help="FOCUS spec version (default: v1.2)")
+    p.add_argument("--spec", help="FOCUS spec version (default: v1.3)")
     p.add_argument("--input", type=_path, help="Input CSV or Parquet")
     p.add_argument("--output", type=_path, help="Output mapping YAML path")
     p.add_argument(
@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         while True:
             available = list_available_spec_versions()
-            default_spec = "v1.2"
+            default_spec = "v1.3"
             if available and default_spec not in available:
                 default_spec = available[-1]
             spec_version = args.spec

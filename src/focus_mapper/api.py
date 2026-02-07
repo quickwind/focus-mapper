@@ -197,7 +197,7 @@ def generate(
 def validate(
     data: pd.DataFrame | Path | str,
     *,
-    spec_version: str = "v1.2",
+    spec_version: str = "v1.3",
     spec_dir: Path | str | None = None,
     mapping: MappingConfig | Path | str | None = None,
     output_path: Path | str | None = None,

@@ -22,7 +22,7 @@ pytest -q
 
 ## Supported Spec Versions
 
-Default spec version is `v1.2`. Supported versions are `v1.1`, `v1.2`, and `v1.3`. `v1.0` is not supported.
+Default spec version is `v1.3`. Supported versions are `v1.1`, `v1.2`, and `v1.3`. `v1.0` is not supported.
 
 ## Populate Spec Versions
 
@@ -31,7 +31,7 @@ Use the tool below to download and store a specific spec version from the upstre
 ```bash
 python tools/populate_focus_spec.py --version 1.1
 python tools/populate_focus_spec.py --version 1.2
-python tools/populate_focus_spec.py --version 1.3 --path specification/datasets/cost_and_usage/columns
+python tools/populate_focus_spec.py --version 1.3
 ```
 
 If a version tag doesn't exist, override the git ref:

@@ -54,7 +54,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd")
 
     gen = sub.add_parser("generate", help="Generate FOCUS report")
-    gen.add_argument("--spec", help="FOCUS spec version (default: v1.2)")
+    gen.add_argument("--spec", help="FOCUS spec version (default: v1.3)")
     gen.add_argument("--input", type=_path, help="Input CSV or Parquet")
     gen.add_argument("--mapping", type=_path, help="Mapping YAML")
     gen.add_argument("--output", type=_path, help="Output CSV or Parquet")
@@ -82,7 +82,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     val = sub.add_parser("validate", help="Validate an existing FOCUS dataset")
-    val.add_argument("--spec", help="FOCUS spec version (default: v1.2)")
+    val.add_argument("--spec", help="FOCUS spec version (default: v1.3)")
     val.add_argument("--input", type=_path, help="Input CSV or Parquet")
     val.add_argument("--out", type=_path, help="Validation report JSON output path")
     val.add_argument(
@@ -211,7 +211,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
 def _cmd_validate(args: argparse.Namespace) -> int:
     available = list_available_spec_versions()
-    default_spec = "v1.2"
+    default_spec = "v1.3"
     if available and default_spec not in available:
         default_spec = available[-1]
     spec_version = getattr(args, "spec", None)

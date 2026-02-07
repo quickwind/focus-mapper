@@ -683,7 +683,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="populate_focus_spec")
     parser.add_argument(
         "--version",
-        default="1.2",
+        default="1.3",
         help="FOCUS spec version to vendor (e.g., 1.0, 1.1, 1.2, 1.3)",
     )
     parser.add_argument(
@@ -693,13 +693,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--path",
-        default="specification/columns",
-        help="Path to spec columns in the repo (default: specification/columns)",
+        default=None,
+        help="Path to spec columns in the repo (default: specification/columns for < 1.3, specification/datasets/cost_and_usage/columns for >= 1.3)",
     )
     args = parser.parse_args(argv)
     version = args.version
     ref = args.ref or f"v{version}"
+    
     path = args.path
+    if path is None:
+        if version >= "1.3":
+            path = "specification/datasets/cost_and_usage/columns"
+        else:
+            path = "specification/columns"
 
     print(f"Populating FOCUS spec v{version} (ref={ref}, path={path})")
     base = f"{BASE}/{ref}/{path}"
