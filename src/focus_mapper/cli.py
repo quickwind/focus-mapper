@@ -12,7 +12,7 @@ from .errors import FocusReportError
 from .io import read_table, write_table
 from .mapping.config import load_mapping_config
 from .mapping.executor import generate_focus_dataframe
-from .metadata import build_sidecar_metadata, write_sidecar_metadata
+from .metadata import build_sidecar_metadata, write_sidecar_metadata, extract_time_sectors
 from .spec import load_focus_spec, list_available_spec_versions
 from .validate import validate_focus_dataframe, write_validation_report
 from .wizard_lib import prompt_menu
@@ -127,6 +127,37 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         validation.summary.warnings,
     )
 
+    # v1.3+ CostAndUsage: Prompt for TimeSector completeness
+    time_sectors: list[dict] | None = None
+    dataset_instance_complete: bool | None = None
+    version = spec.version.lstrip("v")
+
+    if version >= "1.3" and mapping.dataset_type == "CostAndUsage":
+        # First prompt: Is the dataset instance complete?
+        answer = _prompt("Is the dataset instance complete? [Y/n]: ").strip().lower()
+        dataset_instance_complete = answer not in {"n", "no"}
+
+        # Extract distinct time sectors
+        if dataset_instance_complete:
+            time_sectors = extract_time_sectors(
+                out_df, dataset_complete=True
+            )
+        else:
+            # Need to prompt for each sector
+            if "ChargePeriodStart" in out_df.columns and "ChargePeriodEnd" in out_df.columns:
+                pairs = out_df[["ChargePeriodStart", "ChargePeriodEnd"]].drop_duplicates()
+                sector_map: dict[tuple[str, str], bool] = {}
+                for _, row in pairs.iterrows():
+                    start = str(row["ChargePeriodStart"])
+                    end = str(row["ChargePeriodEnd"])
+                    ans = _prompt(f"Is time sector {start} to {end} complete? [Y/n]: ").strip().lower()
+                    sector_map[(start, end)] = ans not in {"n", "no"}
+                time_sectors = extract_time_sectors(
+                    out_df, dataset_complete=False, sector_complete_map=sector_map
+                )
+            else:
+                time_sectors = []
+
     sidecar = build_sidecar_metadata(
         spec=spec,
         mapping=mapping,
@@ -135,6 +166,8 @@ def _cmd_generate(args: argparse.Namespace) -> int:
         input_path=input_path,
         output_path=output_path,
         output_df=out_df,
+        time_sectors=time_sectors,
+        dataset_instance_complete=dataset_instance_complete,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

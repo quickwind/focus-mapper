@@ -77,6 +77,14 @@ def _write_mapping(path: Path, mapping: MappingConfig) -> None:
         "spec_version": mapping.spec_version,
         "mappings": {},
     }
+    # New v1.3+ metadata fields
+    if mapping.creation_date:
+        data["creation_date"] = mapping.creation_date
+    if mapping.dataset_type:
+        data["dataset_type"] = mapping.dataset_type
+    if mapping.dataset_instance_name:
+        data["dataset_instance_name"] = mapping.dataset_instance_name
+
     if mapping.validation_defaults:
         data["validation"] = {"default": mapping.validation_defaults}
 

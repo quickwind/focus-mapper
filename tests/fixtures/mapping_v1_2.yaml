@@ -1,0 +1,230 @@
+spec_version: "v1.2"
+creation_date: "2026-02-07T09:00:00Z"
+
+# Global validation defaults
+validation:
+  default:
+    presence:
+      enforce: true
+    nullable:
+      allow_nulls: false
+    string:
+      allow_empty: false
+      trim: true
+    decimal:
+      scale: 2
+    datetime:
+      format: "iso8601"
+
+mappings:
+  # Mandatory columns (v1.2)
+  ProviderName:
+    steps:
+      - op: const
+        value: "AcmeDC"
+
+  BillingAccountId:
+    steps:
+      - op: const
+        value: "acct-001"
+
+  BillingAccountName:
+    steps:
+      - op: const
+        value: "Acme Billing"
+
+  BillingAccountType:
+    steps:
+      - op: const
+        value: "Enterprise"
+
+  BillingCurrency:
+    steps:
+      - op: from_column
+        column: billing_currency
+      - op: cast
+        to: string
+
+  BillingPeriodStart:
+    steps:
+      - op: pandas_expr
+        expr: 'pd.to_datetime(df["billing_period"] + "-01", utc=True)'
+      - op: cast
+        to: datetime
+
+  BillingPeriodEnd:
+    steps:
+      - op: pandas_expr
+        expr: 'pd.to_datetime((df["billing_period"].str.slice(0,4).astype(int) + ((df["billing_period"].str.slice(5,7).astype(int) + 1) > 12).astype(int)).astype(str) + "-" + (((df["billing_period"].str.slice(5,7).astype(int) + 1 - 1) % 12) + 1).astype(str).str.replace(r"^(\\d)$", r"0\\1", regex=True) + "-01", utc=True)'
+      - op: cast
+        to: datetime
+
+  ChargePeriodStart:
+    steps:
+      - op: pandas_expr
+        expr: 'pd.to_datetime(df["billing_date"] + "T" + df["billing_hour"].astype(int).astype(str).str.replace(r"^(\\d)$", r"0\\1", regex=True) + ":00:00Z", utc=True)'
+      - op: cast
+        to: datetime
+
+  ChargePeriodEnd:
+    steps:
+      - op: pandas_expr
+        expr: 'pd.to_datetime(df["billing_date"] + "T" + df["billing_hour"].astype(int).astype(str).str.replace(r"^(\\d)$", r"0\\1", regex=True) + ":00:00Z", utc=True) + pd.to_timedelta(1, unit="h")'
+      - op: cast
+        to: datetime
+
+  ChargeCategory:
+    steps:
+      - op: from_column
+        column: charge_category
+
+  ChargeClass:
+    steps:
+      - op: const
+        value: null
+    # Override global: allow nulls for this column
+    validation:
+      nullable:
+        allow_nulls: true
+
+  ChargeFrequency:
+    steps:
+      - op: const
+        value: "Usage-Based"
+
+  ChargeDescription:
+    steps:
+      - op: from_column
+        column: charge_description
+
+  InvoiceIssuerName:
+    steps:
+      - op: const
+        value: "AcmeDC"
+
+  PublisherName:
+    steps:
+      - op: const
+        value: "Acme"
+
+  ServiceCategory:
+    steps:
+      - op: const
+        value: "Compute"
+
+  ServiceSubcategory:
+    steps:
+      - op: const
+        value: "Quantum Compute"
+
+  ServiceName:
+    steps:
+      - op: const
+        value: "VirtualMachine"
+
+  PricingQuantity:
+    steps:
+      - op: from_column
+        column: pricing_quantity
+      - op: cast
+        to: decimal
+        scale: 0
+
+  PricingUnit:
+    steps:
+      - op: from_column
+        column: pricing_unit
+      - op: cast
+        to: string
+
+  BilledCost:
+    steps:
+      - op: from_column
+        column: billed_cost
+      - op: cast
+        to: decimal
+        scale: 2
+    # Per-column validation: cost must be non-negative
+    validation:
+      decimal:
+        min: 0
+
+  EffectiveCost:
+    steps:
+      - op: pandas_expr
+        expr: "df['billed_cost'] + df['tax_amount']"
+      - op: cast
+        to: decimal
+        scale: 2
+
+  ContractedCost:
+    steps:
+      - op: from_column
+        column: billed_cost
+      - op: cast
+        to: decimal
+        scale: 2
+
+  ListCost:
+    steps:
+      - op: from_column
+        column: billed_cost
+      - op: cast
+        to: decimal
+        scale: 2
+
+  # Example extension
+  x_CostCenter:
+    description: "Internal cost center code"
+    steps:
+      - op: const
+        value: "CC-123"
+
+  x_CoalescedDescription:
+    description: "Coalesce alt_description then charge_description"
+    steps:
+      - op: coalesce
+        columns: ["alt_description", "charge_description"]
+
+  x_MappedCategory:
+    description: "Map charge_category to short code"
+    steps:
+      - op: map_values
+        column: charge_category
+        mapping:
+          Usage: "U"
+          Tax: "T"
+        default: "Other"
+
+  x_TagConcat:
+    description: "Concat tag_a and tag_b"
+    steps:
+      - op: concat
+        columns: ["tag_a", "tag_b"]
+        sep: "-"
+
+  x_RoundedTax:
+    description: "Rounded tax amount"
+    steps:
+      - op: from_column
+        column: tax_amount
+      - op: round
+        ndigits: 0
+
+  x_MathTotal:
+    description: "Total cost using math op"
+    steps:
+      - op: math
+        operator: add
+        operands:
+          - column: billed_cost
+          - column: tax_amount
+
+  x_WhenTax:
+    description: "Flag rows that are tax"
+    steps:
+      - op: when
+        column: charge_category
+        value: "Tax"
+        then: "Y"
+        else: "N"

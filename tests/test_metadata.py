@@ -11,7 +11,7 @@ from focus_mapper.spec import load_focus_spec
 
 def test_build_sidecar_metadata_tags_and_extensions(tmp_path: Path) -> None:
     spec = load_focus_spec("v1.2")
-    mapping = load_mapping_config(Path("tests/fixtures/mapping_basic.yaml"))
+    mapping = load_mapping_config(Path("tests/fixtures/mapping_v1_2.yaml"))
 
     output_df = pd.DataFrame(
         {
@@ -44,7 +44,7 @@ def test_build_sidecar_metadata_tags_and_extensions(tmp_path: Path) -> None:
 
 
 def test_mapping_yaml_canonical_stable() -> None:
-    mapping = load_mapping_config(Path("tests/fixtures/mapping_basic.yaml"))
+    mapping = load_mapping_config(Path("tests/fixtures/mapping_v1_2.yaml"))
     first = mapping_yaml_canonical(mapping)
     second = mapping_yaml_canonical(mapping)
     assert first == second

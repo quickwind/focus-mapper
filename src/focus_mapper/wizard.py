@@ -89,11 +89,29 @@ def run_wizard(
     ext_rules = _prompt_extension_columns(columns=columns, prompt=prompt)
     rules.extend(ext_rules)
 
+    # Capture creation timestamp
+    creation_date = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    # v1.3+ metadata: dataset_type and dataset_instance_name
+    dataset_type: str = "CostAndUsage"
+    dataset_instance_name: str | None = None
+    if spec.version >= "1.3":
+        dataset_type = prompt_menu(
+            prompt,
+            "Select Dataset Type:",
+            [("CostAndUsage", "CostAndUsage"), ("ContractCommitment", "ContractCommitment")],
+            default="CostAndUsage",
+        )
+        dataset_instance_name = prompt("Dataset Instance Name: ").strip() or None
+
     return WizardResult(
         mapping=MappingConfig(
             spec_version=f"v{spec.version}",
             rules=rules,
             validation_defaults=default_validation,
+            creation_date=creation_date,
+            dataset_type=dataset_type,
+            dataset_instance_name=dataset_instance_name,
         ),
         selected_targets=[t.name for t in targets],
     )

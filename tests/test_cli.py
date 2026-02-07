@@ -25,7 +25,7 @@ def test_cli_generate_writes_outputs(tmp_path: Path) -> None:
         "--input",
         "tests/fixtures/telemetry_small.csv",
         "--mapping",
-        "tests/fixtures/mapping_basic.yaml",
+        "tests/fixtures/mapping_v1_2.yaml",
         "--output",
         str(out_csv),
     ]
@@ -38,6 +38,55 @@ def test_cli_generate_writes_outputs(tmp_path: Path) -> None:
 
     df = pd.read_csv(out_csv)
     assert "BilledCost" in df.columns
+
+
+def test_cli_generate_v1_3_writes_outputs(tmp_path: Path) -> None:
+    """Test that v1.3 generate produces correct metadata structure with collections."""
+    out_csv = tmp_path / "focus_v1_3.csv"
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path("src")) + (
+        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+    )
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "focus_mapper",
+        "generate",
+        "--spec",
+        "v1.3",
+        "--input",
+        "tests/fixtures/telemetry_small.csv",
+        "--mapping",
+        "tests/fixtures/mapping_v1_3.yaml",
+        "--output",
+        str(out_csv),
+    ]
+    # v1.3 prompts for TimeSector completeness - provide Y for complete
+    p = subprocess.run(cmd, check=False, capture_output=True, text=True, env=env, input="Y\n")
+    # Exit code 2 means validation errors (expected for sample data with missing columns)
+    # Files are still generated, which is what we're testing
+    assert p.returncode in (0, 2), p.stderr
+
+    assert out_csv.exists()
+    metadata_path = tmp_path / "focus_v1_3.csv.focus-metadata.json"
+    assert metadata_path.exists()
+    assert (tmp_path / "focus_v1_3.csv.validation.json").exists()
+
+    df = pd.read_csv(out_csv)
+    assert "BilledCost" in df.columns
+    assert "HostProviderName" in df.columns  # v1.3 column
+
+    # Verify v1.3 metadata structure has collections
+    meta = json.loads(metadata_path.read_text())
+    assert "DatasetInstance" in meta
+    assert isinstance(meta["DatasetInstance"], list)
+    assert "Recency" in meta
+    assert isinstance(meta["Recency"], list)
+    assert "Schema" in meta
+    assert isinstance(meta["Schema"], list)
+    assert meta["Schema"][0]["FocusVersion"] == "1.3"
 
 
 def test_cli_validate_exit_code_on_errors(tmp_path: Path) -> None:
@@ -90,7 +139,7 @@ def test_cli_generate_parquet_embeds_metadata(tmp_path: Path) -> None:
         "--input",
         str(in_parquet),
         "--mapping",
-        "tests/fixtures/mapping_basic.yaml",
+        "tests/fixtures/mapping_v1_2.yaml",
         "--output",
         str(out_parquet),
     ]
@@ -160,9 +209,7 @@ def test_cli_generate_interactive(tmp_path: Path, monkeypatch) -> None:
 
     inputs = iter(
         [
-            "1",
-            "v1.2",
-            "tests/fixtures/mapping_basic.yaml",
+            "tests/fixtures/mapping_v1_2.yaml",
             "tests/fixtures/telemetry_small.csv",
             str(out_csv),
         ]
@@ -171,7 +218,7 @@ def test_cli_generate_interactive(tmp_path: Path, monkeypatch) -> None:
 
     from focus_mapper.cli import main
 
-    rc = main([])
+    rc = main(["generate"])
     assert rc == 0
     assert out_csv.exists()
 
@@ -194,7 +241,7 @@ def test_cli_validate_interactive(tmp_path: Path, monkeypatch) -> None:
         "--input",
         "tests/fixtures/telemetry_small.csv",
         "--mapping",
-        "tests/fixtures/mapping_basic.yaml",
+        "tests/fixtures/mapping_v1_2.yaml",
         "--output",
         str(out_csv),
     ]

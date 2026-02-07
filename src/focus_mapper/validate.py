@@ -107,18 +107,23 @@ def validate_focus_dataframe(
             continue
 
         level = col.feature_level.strip().lower()
+
+        # Determine severity based on feature level
         if level == "mandatory":
             severity = "ERROR"
-        elif level == "conditional":
+        elif level == "recommended":
             severity = "WARN"
-        else:
+        elif level == "conditional":
             severity = "INFO"
+        else:
+            # Optional columns: no finding for missing
+            continue
 
         findings.append(
             ValidationFinding(
                 check_id="focus.column_present",
                 severity=severity,
-                message="FOCUS column is missing from dataset",
+                message=f"FOCUS column is missing from dataset (feature level: {col.feature_level})",
                 column=col.name,
             )
         )

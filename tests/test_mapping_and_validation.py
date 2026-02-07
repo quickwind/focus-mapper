@@ -9,7 +9,7 @@ from focus_mapper.validate import validate_focus_dataframe
 def test_generate_and_validate_focus_dataset_from_fixtures() -> None:
     spec = load_focus_spec("v1.2")
     mapping = load_mapping_config(
-        __import__("pathlib").Path("tests/fixtures/mapping_basic.yaml")
+        __import__("pathlib").Path("tests/fixtures/mapping_v1_2.yaml")
     )
     df = pd.read_csv("tests/fixtures/telemetry_small.csv")
 

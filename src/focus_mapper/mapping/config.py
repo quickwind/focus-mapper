@@ -22,6 +22,9 @@ class MappingConfig:
     spec_version: str
     rules: list[MappingRule]
     validation_defaults: dict[str, Any]
+    creation_date: str | None = None  # ISO8601, captured by wizard
+    dataset_type: str = "CostAndUsage"  # v1.3+: CostAndUsage or ContractCommitment
+    dataset_instance_name: str | None = None  # v1.3+: User-provided name
 
     def rule_for_target(self, target: str) -> MappingRule | None:
         for r in self.rules:
@@ -94,9 +97,24 @@ def load_mapping_config(path: Path) -> MappingConfig:
                 validation=validation,
             )
         )
+    # v1.3+ metadata fields (optional for backward compatibility)
+    creation_date = raw.get("creation_date")
+    if creation_date is not None and not isinstance(creation_date, str):
+        raise MappingConfigError("mapping.creation_date must be a string if provided")
+
+    dataset_type = raw.get("dataset_type", "CostAndUsage")
+    if not isinstance(dataset_type, str):
+        raise MappingConfigError("mapping.dataset_type must be a string")
+
+    dataset_instance_name = raw.get("dataset_instance_name")
+    if dataset_instance_name is not None and not isinstance(dataset_instance_name, str):
+        raise MappingConfigError("mapping.dataset_instance_name must be a string if provided")
 
     return MappingConfig(
         spec_version=spec_version,
         rules=rules,
         validation_defaults=default_validation,
+        creation_date=creation_date,
+        dataset_type=dataset_type,
+        dataset_instance_name=dataset_instance_name,
     )
