@@ -10,14 +10,15 @@ This project takes any tabular data (CSV/Parquet) and converts it to a FOCUS com
 ## Quickstart
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+pip install focus-mapper
 
-pip install -U pip
-pip install -e ".[dev]"
+# With Parquet support
+pip install "focus-mapper[parquet]"
 
-python -m focus_mapper --help
-pytest -q
+# Force Pandas 1.5 (legacy support)
+pip install "focus-mapper[pandas15]"
+
+focus-mapper --help
 ```
 
 ## Supported Spec Versions
@@ -112,10 +113,10 @@ Outputs:
 
 ## Use As A Library
 
-Install from a local checkout:
+Install from PyPI:
 
 ```bash
-pip install -e /path/to/focus-mapper
+pip install focus-mapper
 ```
 
 ### High-Level API (Recommended)
@@ -208,7 +209,7 @@ report = validate_focus_dataframe(out, spec=spec, mapping=mapping)
 ```
 
 Notes:
-- Parquet support requires `pyarrow` (`pip install -e ".[parquet]"`).
+- Parquet support requires `pyarrow` (`pip install "focus-mapper[parquet]"`).
 - Supported specs: `v1.1`, `v1.2`, and `v1.3`. `v1.0` is not supported.
 - Validation overrides require passing `mapping` to `validate_focus_dataframe`.
 

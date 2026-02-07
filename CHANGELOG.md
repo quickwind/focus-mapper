@@ -25,6 +25,7 @@ This release introduces a stable Python library API, full support for FOCUS v1.3
 - **Default Version Change**: `v1.3` is now the default version for CLI and library (previously `v1.2`)
 - **Metadata**: Support for v1.3 metadata collections (`DatasetInstance`, `Recency`, `Schema`, `DataGenerator`)
 - **DataGenerator Customization**: usage of `FOCUS_DATA_GENERATOR_NAME` and `FOCUS_DATA_GENERATOR_VERSION` environment variables
+- **Dependencies**: Relaxed pandas requirement to `>=1.5`. Added `pandas15` optional extra.
 - **Validation**: Updated validation rules for v1.3 columns and constraints
 
 #### External Spec Management

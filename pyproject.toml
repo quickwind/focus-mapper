@@ -29,7 +29,7 @@ classifiers = [
 ]
 urls = { "Homepage" = "https://github.com/quickwind/focus-mapper", "Repository" = "https://github.com/quickwind/focus-mapper" }
 dependencies = [
-  "pandas>=2,<3",
+  "pandas>=1.5,<3",
   "PyYAML>=5.4",
   "pyreadline3>=3.5; platform_system == 'Windows'",
   "iso4217parse>=0.6",
