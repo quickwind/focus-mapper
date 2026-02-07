@@ -87,27 +87,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _cmd_generate(args: argparse.Namespace) -> int:
-    available = list_available_spec_versions()
-    default_spec = "v1.2"
-    if available and default_spec not in available:
-        default_spec = available[-1]
-    spec_version = getattr(args, "spec", None)
-    if not spec_version:
-        if available:
-            options = [(v, v) for v in available]
-            spec_version = prompt_menu(
-                _prompt,
-                "Select FOCUS spec version:",
-                options,
-                default=default_spec,
-            )
-        else:
-            spec_version = (
-                _prompt(f"FOCUS spec version [{default_spec}]: ").strip() or default_spec
-            )
-    logger.debug("Loading FOCUS spec version: %s", spec_version)
-    spec = load_focus_spec(spec_version)
-
     mapping_path = getattr(args, "mapping", None)
     while mapping_path is None:
         with path_completion():
@@ -116,6 +95,10 @@ def _cmd_generate(args: argparse.Namespace) -> int:
             mapping_path = _path(val)
     logger.debug("Loading mapping configuration from: %s", mapping_path)
     mapping = load_mapping_config(mapping_path)
+
+    spec_version = getattr(args, "spec", None) or mapping.spec_version
+    logger.debug("Loading FOCUS spec version: %s", spec_version)
+    spec = load_focus_spec(spec_version)
 
     input_path = getattr(args, "input", None)
     while input_path is None:
@@ -185,15 +168,20 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     default_spec = "v1.2"
     if available and default_spec not in available:
         default_spec = available[-1]
-    spec_version = (
-        getattr(args, "spec", None)
-        or _prompt(
-            f"FOCUS spec version [{default_spec}]"
-            + (f" (available: {', '.join(available)})" if available else "")
-            + ": "
-        ).strip()
-        or default_spec
-    )
+    spec_version = getattr(args, "spec", None)
+    if not spec_version:
+        if available:
+            options = [(v, v) for v in available]
+            spec_version = prompt_menu(
+                _prompt,
+                "Select FOCUS spec version:",
+                options,
+                default=default_spec,
+            )
+        else:
+            spec_version = (
+                _prompt(f"FOCUS spec version [{default_spec}]: ").strip() or default_spec
+            )
     logger.debug("Loading FOCUS spec version: %s", spec_version)
     spec = load_focus_spec(spec_version)
 
