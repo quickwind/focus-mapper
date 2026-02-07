@@ -34,7 +34,7 @@ python tools/populate_focus_spec.py --version 1.2
 python tools/populate_focus_spec.py --version 1.3 --path specification/datasets/cost_and_usage/columns
 ```
 
-If a version tag doesn’t exist, override the git ref:
+If a version tag doesn't exist, override the git ref:
 
 ```bash
 python tools/populate_focus_spec.py --version 1.2 --ref main
@@ -47,7 +47,7 @@ Then use `--spec v1.2` (or `v1.1`, `v1.3`) in the CLI.
 - A flat input table (CSV or Parquet).
 - A mapping YAML that tells the tool how to create each FOCUS column.
 
-If you don’t have a mapping yet, start with the wizard.
+If you don't have a mapping yet, start with the wizard.
 
 ## Generate
 
@@ -68,25 +68,92 @@ Outputs:
 
 ## Use As A Library
 
-You can install and call `focus-mapper` from another Python project.
-
 Install from a local checkout:
 
 ```bash
 pip install -e /path/to/focus-mapper
 ```
 
-Example usage:
+### High-Level API (Recommended)
+
+The library provides three main entrypoint functions:
+
+```python
+from focus_mapper import generate, validate, validate_mapping
+
+# Generate FOCUS data from input + mapping
+result = generate(
+    input_data="telemetry.csv",           # Path or DataFrame
+    mapping="mapping.yaml",                # Path or MappingConfig
+    output_path="focus.parquet",           # Output file path
+    spec_version="v1.3",                   # Optional, defaults to mapping version
+    dataset_instance_complete=True,        # v1.3+ metadata
+    generator_name="my-tool",              # Custom generator name
+    generator_version="2.0.0",             # Custom generator version
+)
+
+if result.is_valid:
+    print(f"Generated {len(result.output_df)} rows")
+else:
+    print(f"Validation errors: {result.validation.summary.errors}")
+
+# Validate existing FOCUS data
+report = validate(
+    data="focus.parquet",                  # Path or DataFrame
+    spec_version="v1.3",
+    output_path="validation.json",
+    write_report=True,
+)
+
+for finding in report.findings:
+    if finding.severity == "ERROR":
+        print(f"Error in {finding.column}: {finding.message}")
+
+# Validate mapping YAML before use
+mapping_result = validate_mapping("mapping.yaml")
+
+if not mapping_result.is_valid:
+    for error in mapping_result.errors:
+        print(f"Error: {error}")
+```
+
+### Return Types
+
+| Function | Returns |
+|----------|---------|
+| `generate()` | `GenerationResult` with `output_df`, `validation`, `metadata`, `is_valid` |
+| `validate()` | `ValidationReport` with `findings`, `summary` |
+| `validate_mapping()` | `MappingValidationResult` with `is_valid`, `errors`, `warnings`, `mapping` |
+
+### Exported Types
+
+```python
+from focus_mapper import (
+    # Main API functions
+    generate, validate, validate_mapping,
+    # Result types
+    GenerationResult, MappingValidationResult, ValidationReport,
+    ValidationFinding, ValidationSummary, SidecarMetadata,
+    # Config types
+    MappingConfig, FocusSpec,
+    # Loaders
+    load_mapping_config, load_focus_spec,
+)
+```
+
+### Low-Level API
+
+For more control, use the individual modules:
 
 ```python
 from pathlib import Path
-
 import pandas as pd
 
 from focus_mapper.mapping.config import load_mapping_config
 from focus_mapper.mapping.executor import generate_focus_dataframe
 from focus_mapper.spec import load_focus_spec
 from focus_mapper.validate import validate_focus_dataframe
+from focus_mapper.metadata import build_sidecar_metadata, write_sidecar_metadata
 
 df = pd.read_csv("input.csv")
 mapping = load_mapping_config(Path("mapping.yaml"))
@@ -100,6 +167,24 @@ Notes:
 - Parquet support requires `pyarrow` (`pip install -e ".[parquet]"`).
 - Supported specs: `v1.1`, `v1.2`, and `v1.3`. `v1.0` is not supported.
 - Validation overrides require passing `mapping` to `validate_focus_dataframe`.
+
+## v1.3 Metadata Support
+
+For v1.3 datasets, the library generates the new collection-based metadata structure:
+
+```json
+{
+  "DatasetInstance": [{ "DatasetInstanceId": "...", "DatasetInstanceName": "...", "FocusDatasetId": "CostAndUsage" }],
+  "Recency": [{ "DatasetInstanceId": "...", "DatasetInstanceComplete": true, "TimeSectors": [...] }],
+  "Schema": [{ "SchemaId": "...", "FocusVersion": "1.3", "ColumnDefinition": [...] }],
+  "DataGenerator": { "DataGenerator": "focus-mapper" }
+}
+```
+
+Key v1.3 features:
+- **TimeSectors**: Per-period completeness tracking for CostAndUsage datasets
+- **DatasetInstanceComplete**: Overall dataset completeness flag
+- **DatasetInstanceId**: Deterministic hash for dataset identification
 
 ## Mapping Wizard
 
@@ -137,6 +222,10 @@ Each column in the `mappings` section is defined as a series of **steps**. Steps
 ### Top-level Structure
 ```yaml
 spec_version: "1.2"
+creation_date: "2026-02-07T09:00:00Z"  # v1.2+: ISO8601 timestamp
+dataset_type: "CostAndUsage"            # v1.3+: CostAndUsage or ContractCommitment
+dataset_instance_name: "My Report"      # v1.3+: Human-readable name
+
 validation:
   default:
     mode: permissive
@@ -243,7 +332,18 @@ Validation override keys:
 - `json.object_only`: require JSON objects only
 - `allowed_values.case_insensitive`: case‑insensitive matching (default: false)
 - `nullable.allow_nulls`: override spec nullability
-- `presence.enforce`: skip “missing column” checks
+- `presence.enforce`: skip "missing column" checks
+
+### Validation Severity by Feature Level
+
+Missing column validation severity is determined by the column's feature level:
+
+| Feature Level | Severity | Finding Generated? |
+|---------------|----------|-------------------|
+| Mandatory | ERROR | Yes |
+| Recommended | WARN | Yes |
+| Conditional | INFO | Yes |
+| Optional | - | No |
 
 ### Example Input (CSV)
 
@@ -308,6 +408,7 @@ mappings:
 |-----------|-------------|------------|---------|
 | `from_column` | Initialize the pipeline from a source column. Use this as the first step when you want to transform an input field. | `column` (string; input column name) | `- op: from_column`<br>`  column: "cost"` |
 | `const` | Create a column with the same value for every row (including `null`). Useful for static metadata. | `value` (any) | `- op: const`<br>`  value: "Acme"` |
+| `null` | Create a column filled with null values. Use quoted `"null"` in YAML. | (none) | `- op: "null"` |
 | `coalesce` | Pick the first non-null value across multiple columns, left to right. | `columns` (list of strings) | `- op: coalesce`<br>`  columns: ["a", "b"]` |
 | `map_values` | Replace values using a lookup dictionary. If a value is missing, use `default` (or null if not set). Can start from `column` or the current series. | `mapping` (dict), `default` (optional), `column` (optional) | `- op: map_values`<br>`  column: "charge_category"`<br>`  mapping: {"Usage": "U", "Tax": "T"}` |
 | `concat` | Join multiple columns into a single string. Nulls are treated as empty strings. | `columns` (list), `sep` (string, default "") | `- op: concat`<br>`  columns: ["tag_a", "tag_b"]`<br>`  sep: "-"` |
