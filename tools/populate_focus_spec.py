@@ -42,18 +42,8 @@ def fetch_json(url: str) -> dict:
         raise RuntimeError(f"Failed to fetch {url} (HTTP {e.code})") from e
 
 
-def parse_columns_mdpp(text: str) -> list[str]:
-    files = []
-    for line in text.splitlines():
-        line = line.strip()
-        m = re.match(r"^!INCLUDE \"([^\"]+)\",", line)
-        if not m:
-            continue
-        files.append(m.group(1))
-    return files
-
-
-def parse_includes_mdpp(text: str) -> list[str]:
+def _parse_mdpp_includes(text: str) -> list[str]:
+    """Parse !INCLUDE directives from MDPP files."""
     files = []
     for line in text.splitlines():
         line = line.strip()
@@ -155,12 +145,23 @@ def parse_allowed_values(
 
     header_norm = [norm(h) for h in header]
     target_idx = 0
+    
+    # Try multiple strategies to find the right column
     if "value" in header_norm:
         target_idx = header_norm.index("value")
     elif display_name and norm(display_name) in header_norm:
         target_idx = header_norm.index(norm(display_name))
     elif column_id and norm(column_id) in header_norm:
         target_idx = header_norm.index(norm(column_id))
+    else:
+        # Fallback: look for a column that contains the column_id or display_name
+        for idx, h in enumerate(header_norm):
+            if column_id and norm(column_id) in h:
+                target_idx = idx
+                break
+            if display_name and norm(display_name) in h:
+                target_idx = idx
+                break
 
     values: list[str] = []
     seen = set()
@@ -299,10 +300,11 @@ def _parse_columns_from_markdown(md: str) -> list[Column]:
             continue
 
         display = None
+        # Match "##### Display Name" header followed by content on next line(s)
         dm = re.search(
-            r"^##### .*?Display Name\s*\n\s*(.+?)\s*$",
+            r"^#+ .*?Display Name\s*$.*?^([^#\n]+)",
             block,
-            flags=re.MULTILINE,
+            flags=re.MULTILINE | re.DOTALL,
         )
         if dm:
             display = dm.group(1).strip()
@@ -395,7 +397,7 @@ def _collect_metadata_entries(
         print(f"[metadata] Fetching {path}")
         text = fetch_text(f"{BASE}/{ref}/{path}")
         entries = _parse_metadata_entries(text)
-        includes = parse_includes_mdpp(text)
+        includes = _parse_mdpp_includes(text)
         if not includes:
             return entries
         base_dir = path.rsplit("/", 1)[0]
@@ -689,7 +691,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         print(f"Fetching index: {base}/columns.mdpp")
         cols_mdpp = fetch_text(f"{base}/columns.mdpp")
-        files = parse_columns_mdpp(cols_mdpp)
+        files = _parse_mdpp_includes(cols_mdpp)
         index_path = f"{path.strip('/')}/columns.mdpp"
     except RuntimeError:
         try:
@@ -698,7 +700,7 @@ def main(argv: list[str] | None = None) -> int:
             if index_path:
                 print(f"Discovered index: {index_path}")
                 cols_mdpp = fetch_text(f"{BASE}/{ref}/{index_path}")
-                files = parse_columns_mdpp(cols_mdpp)
+                files = _parse_mdpp_includes(cols_mdpp)
             else:
                 print(f"No index file found. Using column files under {base_dir}")
         except RuntimeError as e:
@@ -708,7 +710,7 @@ def main(argv: list[str] | None = None) -> int:
             ) from e
 
     if index_path:
-        base_dir = index_path.rsplit("/", 1)[0]
+        base_dir = index_path.rsplit("/", 1)[0] if "/" in index_path else ""
         file_paths = [join_repo_path(base_dir, f) for f in files]
     else:
         if not blobs:
@@ -799,8 +801,11 @@ def main(argv: list[str] | None = None) -> int:
     if not init_py.exists():
         init_py.write_text("", encoding="utf-8")
     dest = _dest_file(version)
-    dest.write_text(json.dumps(out, indent=2, sort_keys=True), encoding="utf-8")
-    print(f"Wrote {dest}")
+    try:
+        dest.write_text(json.dumps(out, indent=2, sort_keys=True), encoding="utf-8")
+        print(f"Wrote {dest}")
+    except (OSError, IOError) as e:
+        raise RuntimeError(f"Failed to write spec file to {dest}: {e}") from e
     return 0
 
 
