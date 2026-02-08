@@ -364,3 +364,71 @@ def test_wizard_extension_prevent_duplicates(mock_spec, sample_df):
     assert "x_uniq" in targets
     assert "x_uniq2" in targets
     assert len(targets) == 2
+
+
+def test_wizard_extension_suggestion(mock_spec, sample_df):
+    """Test extension suggestion logic."""
+    # input_df has "source_col".
+    # We will add extension with suffix "source_col".
+    # This should trigger suggestion logic.
+    
+    # Inputs:
+    # 1. Dataset
+    # 2. Defaults
+    # 3. Global Valid? n
+    # 4. Mandatory -> Skip (to focus on ext)
+    #    (Wait, Mandatory prompt loops until mapped?)
+    #    mock_spec has MandatoryCol. 
+    #    We can map it quickly to const.
+    # 5. Add ext? y
+    # 6. Suffix: "source_col"
+    #    -> Suggestion found: "source_col"
+    #    -> Inferred type? "source_col" in sample_df has strings ["a", "b"].
+    #       So inferred type is "string".
+    # 7. Desc
+    # 8. Type menu (default string).
+    #    We mocking menu, so we check if default matches?
+    #    Hard to check default in side_effect.
+    #    But we can just select "string".
+    # 9. Init -> "from_column"
+    # 10. "Use suggested column 'source_col'?" -> y
+    # 11. Add ext? n
+    
+    inputs = [
+        "TestDS", "y", "n", 
+        "A",             # Mandatory -> const "A"
+        "y",             # Add ext
+        "source_col",    # Suffix matching input
+        "desc", 
+        # "string",      # Type (menu)
+        # "from_column", # Menu
+        "y",             # Use suggested column?
+        "n"              # Finish
+    ]
+    
+    menu_choices = ["const", "done", "skip", "string", "from_column"]
+    menu_iter = iter(menu_choices)
+    
+    def menu_side_effect(prompt, header, options, default=None):
+        try:
+            val = next(menu_iter)
+            return val
+        except StopIteration:
+            return default
+
+    with patch("focus_mapper.wizard.prompt_menu", side_effect=menu_side_effect):
+        result = run_wizard(
+            spec=mock_spec,
+            input_df=sample_df,
+            prompt=create_mock_prompt(inputs),
+            include_optional=True,
+            include_recommended=True,
+            include_conditional=True,
+            sample_df=sample_df # Must pass sample_df for inference
+        )
+        
+    ext_rules = [r for r in result.mapping.rules if r.target == "x_source_col"]
+    assert len(ext_rules) == 1
+    # Verify it mapped from "source_col"
+    assert ext_rules[0].steps[0]["op"] == "from_column"
+    assert ext_rules[0].steps[0]["column"] == "source_col"

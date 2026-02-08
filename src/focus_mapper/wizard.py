@@ -182,10 +182,12 @@ def run_wizard(
 
     _ = _prompt_extension_columns(
         columns=columns, 
+        normalized=normalized,
         prompt=prompt, 
         existing_targets=current_ext_targets,
         on_rule_added=on_ext_rule,
-        ask_validation_overrides=ask_validation_overrides
+        ask_validation_overrides=ask_validation_overrides,
+        sample_df=sample_df,
     )
     # We ignore the returned rules list because on_ext_rule handles appending and saving.
 
@@ -521,10 +523,12 @@ def _prompt_for_steps(
 def _prompt_extension_columns(
     *, 
     columns: list[str], 
+    normalized: dict[str, str],
     prompt: PromptFunc, 
     existing_targets: set[str] | None = None,
     on_rule_added: Callable[[MappingRule], None] | None = None,
     ask_validation_overrides: bool = True,
+    sample_df: pd.DataFrame | None = None,
 ) -> list[MappingRule]:
     # If existing_targets provided, we assume we might be resuming.
     # Spec says: "ask for extensions".
@@ -538,7 +542,9 @@ def _prompt_extension_columns(
         if not add:
             return rules
 
-        suffix = prompt("Extension column suffix (appended to x_): ").strip()
+        with column_completion(columns):
+            suffix = prompt("Extension column suffix (appended to x_): ").strip()
+        
         if not suffix:
              print("Suffix cannot be empty.\n")
              continue
@@ -546,13 +552,44 @@ def _prompt_extension_columns(
         # Auto-prefix x_ if not present
         if suffix.startswith("x_"):
             name = suffix
+            # For suggestions, we strip x_ to see if there is a match in input cols
+            candidate_base = suffix[2:]
         else:
             name = f"x_{suffix}"
+            candidate_base = suffix
 
         if name in full_existing_targets:
             print(f"Extension '{name}' is already defined. Skipping.\n")
             continue
 
+        # Check for suggested column from input data
+        suggested_col = _suggest_column(candidate_base, normalized)
+        inferred_type = "string"
+        
+        if suggested_col and sample_df is not None:
+             if suggested_col in sample_df.columns:
+                 # Infer type
+                 try:
+                     dtype = sample_df[suggested_col].dtype
+                     if pd.api.types.is_float_dtype(dtype) or pd.api.types.is_integer_dtype(dtype):
+                         inferred_type = "decimal"
+                     elif pd.api.types.is_datetime64_any_dtype(dtype):
+                         inferred_type = "datetime"
+                     # Check for collection? Hard without inspecting values
+                     # Check for boolean?
+                     elif pd.api.types.is_bool_dtype(dtype):
+                         inferred_type = "string" # FOCUS extensions usually string or specific types, boolean supported?
+                         # The menu below has string, decimal, datetime, json. 
+                         # User requested: "inferred type ... would be default for menu"
+                         # Menu choices: string, decimal, datetime, json.
+                         # If bool, maybe string? Or add boolean to menu?
+                         # _prompt_column_validation supports boolean. 
+                         # But FOCUS spec for extension types? 
+                         # Usually string, decimal, datetime.
+                         pass
+                 except Exception:
+                     pass
+        
         desc = prompt("Description (optional): ").strip() or None
         
         # Prompt for data type
@@ -565,7 +602,7 @@ def _prompt_extension_columns(
                  ("datetime", "DateTime"),
                  ("json", "JSON"),
              ],
-             default="string",
+             default=inferred_type,
         )
         if not data_type:
             data_type = "string"
@@ -584,10 +621,9 @@ def _prompt_extension_columns(
         steps = _prompt_for_steps(
              target=temp_spec,
              columns=columns,
-             suggested=None,
+             suggested=suggested_col,
              prompt=prompt,
-             # We don't have sample_df passed here easily unless we change signature
-             # For now, extensions won't have live preview unless we pass sample_df
+             sample_df=sample_df,
         )
 
         if steps:
