@@ -530,6 +530,9 @@ def _prompt_extension_columns(
     # Spec says: "ask for extensions".
     
     rules: list[MappingRule] = []
+    # Track locally added targets to prevent duplicates within this session
+    full_existing_targets = set(existing_targets) if existing_targets else set()
+
     while True:
         add = prompt_bool(prompt, "Add x_ extension column? [Y/n] ", default=True)
         if not add:
@@ -546,7 +549,7 @@ def _prompt_extension_columns(
         else:
             name = f"x_{suffix}"
 
-        if existing_targets and name in existing_targets:
+        if name in full_existing_targets:
             print(f"Extension '{name}' is already defined. Skipping.\n")
             continue
 
@@ -609,6 +612,7 @@ def _prompt_extension_columns(
                 validation=validation,
             )
             rules.append(rule)
+            full_existing_targets.add(name)
             if on_rule_added:
                 on_rule_added(rule)
         else:

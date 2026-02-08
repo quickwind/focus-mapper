@@ -252,3 +252,115 @@ def test_extension_autosave(mock_spec, sample_df):
     # Verify x_ext1 is in the rules of the saved config
     targets = [r.target for r in last_config.rules]
     assert "x_ext1" in targets
+
+
+def test_wizard_extension_prevent_duplicates(mock_spec, sample_df):
+    """Test that wizard prevents adding duplicate extension columns."""
+    
+    # Inputs:
+    # 1. Dataset
+    # 2. Defaults
+    # 3. Global Valid? n
+    # 4. Mand -> const
+    # 5. Add ext? y
+    # 6. suffix: "uniq"
+    # 7. desc
+    # 8. type: string (via menu)
+    # 9. const
+    # 10. Add ext? y
+    # 11. suffix: "uniq" (DUPLICATE - should reject and loop)
+    # 12. suffix: "uniq2" (valid)
+    # 13. desc
+    # 14. type: string
+    # 15. const
+    # 16. Add ext? n
+    
+    inputs = [
+        "TestDS", "y", "n", 
+        "A", 
+        "y",             # Add ext 1
+        "uniq", "desc1", 
+        # "string", 
+        "B", 
+        "y",             # Add ext 2 (attempt duplicate)
+        "uniq",          # DUPLICATE -> Wizard loops back
+        "y",             # Retry Add ext
+        "uniq2",         # Valid
+        "desc2", 
+        # "string", 
+        "C", 
+        "n"              # Finish
+    ]
+    
+    # Menu choices:
+    # 1. Mandatory (Init) -> "const"
+    # 2. Mandatory (Add Step) -> "done"
+    # 3. Optional (Init) -> "skip"
+    # 4. Ext 1 (Type) -> "string"
+    # 5. Ext 1 (Init) -> "const"
+    # 6. Ext 1 (Add Step) -> "done"
+    # 7. Ext 2 (Type) -> "string"
+    # 8. Ext 2 (Init) -> "const"
+    # 9. Ext 2 (Add Step) -> "done"
+    menu_choices = [
+        "const", "done", "skip", 
+        "string", "const", "done", 
+        "string", "const", "done"
+    ]
+    menu_iter = iter(menu_choices)
+    
+    def menu_side_effect(prompt, header, options, default=None):
+        try:
+            return next(menu_iter)
+        except StopIteration:
+            return default
+
+    # Mock prompt_bool to return True for "Add ext?" and False for others/end
+    # Inputs list for prompt_bool:
+    # 1. Global Valid? -> False (handled by inputs list usually? No prompt_bool handles its own)
+    # Wait, prompt_bool uses `prompt` fixture if not mocked separately.
+    # In my tests usually `prompt` function handles string inputs.
+    # But `prompt_bool` calls `prompt`. 
+    # Let's verify `run_wizard` usage. 
+    # `ask_validation_overrides` uses prompt_bool.
+    # `add` (extension) uses prompt_bool (changed by user).
+    
+    # If `prompt_bool` uses `prompt` (the fixture), then my inputs list should contain "y" or "n".
+    # User changed `add = prompt_bool(...)`.
+    # `prompt_bool` implementation calls `prompt(...)`.
+    
+    # So my inputs list MUST contain "y"/"n" strings for boolean prompts.
+    
+    # Inputs re-verified:
+    # prompt("Dataset") -> "TestDS"
+    # prompt_bool("Defaults") -> "y" (via prompt)
+    # prompt_bool("Global Valid") -> "n"
+    # prompt("Mandatory") -> "A" (via const loop logic)
+    # prompt_bool("Add ext?") -> "y"
+    # prompt("Suffix") -> "uniq"
+    # prompt("Desc") -> "desc1"
+    # prompt_menu("Type") -> (handled by side_effect)
+    # prompt("Const") -> "B"
+    # prompt_bool("Add ext?") -> "y"
+    # prompt("Suffix") -> "uniq" (Duplicate test)
+    # prompt("Suffix") -> "uniq2"
+    # prompt("Desc") -> "desc2"
+    # prompt_menu("Type") -> (handled by side_effect)
+    # prompt("Const") -> "C"
+    # prompt_bool("Add ext?") -> "n"
+    
+    with patch("focus_mapper.wizard.prompt_menu", side_effect=menu_side_effect):
+        result = run_wizard(
+            spec=mock_spec,
+            input_df=sample_df,
+            prompt=create_mock_prompt(inputs),
+            include_optional=True,
+            include_recommended=True,
+            include_conditional=True,
+        )
+        
+    ext_rules = [r for r in result.mapping.rules if r.target.startswith("x_")]
+    targets = {r.target for r in ext_rules}
+    assert "x_uniq" in targets
+    assert "x_uniq2" in targets
+    assert len(targets) == 2
