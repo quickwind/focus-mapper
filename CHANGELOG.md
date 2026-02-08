@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Refactored
 - **Spec Resolution**: Consolidated logic for resolving external spec directories into a reusable helper `_resolve_spec_search_paths`, eliminating code duplication in `focus_mapper/spec.py`.
 
+## [0.5.1] - 2026-02-08
+
+### Added
+- **Skipped Columns Persistence**: The wizard now remembers which columns you explicitly skipped, preventing re-prompting when resuming a mapping session.
+- **Enhanced Extension Columns**:
+  - **Auto-Prefix**: Automatically appends `x_` to extension column names if omitted.
+  - **Full Mapping Support**: Extension columns now support all mapping operations (SQL, Pandas, Const, etc.) and data type selection.
+
 ## [0.4.0] - 2026-02-08
 
 ### New Feature: Wizard Live Preview

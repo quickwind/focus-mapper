@@ -93,6 +93,9 @@ def _write_mapping(path: Path, mapping: MappingConfig) -> None:
     if mapping.validation_defaults:
         data["validation"] = {"default": mapping.validation_defaults}
 
+    if mapping.skipped_columns:
+        data["skipped_columns"] = mapping.skipped_columns
+
     mappings: dict[str, object] = {}
     for rule in mapping.rules:
         body: dict[str, object] = {"steps": rule.steps}

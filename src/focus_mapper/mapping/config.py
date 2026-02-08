@@ -25,6 +25,7 @@ class MappingConfig:
     creation_date: str | None = None  # ISO8601, captured by wizard
     dataset_type: str = "CostAndUsage"  # v1.3+: CostAndUsage or ContractCommitment
     dataset_instance_name: str | None = None  # v1.3+: User-provided name
+    skipped_columns: list[str] | None = None  # v0.5+: Columns explicitly skipped by user
 
     def rule_for_target(self, target: str) -> MappingRule | None:
         for r in self.rules:
@@ -110,6 +111,10 @@ def load_mapping_config(path: Path) -> MappingConfig:
     if dataset_instance_name is not None and not isinstance(dataset_instance_name, str):
         raise MappingConfigError("mapping.dataset_instance_name must be a string if provided")
 
+    skipped_columns = raw.get("skipped_columns")
+    if skipped_columns is not None and not isinstance(skipped_columns, list):
+         raise MappingConfigError("mapping.skipped_columns must be a list of strings if provided")
+
     return MappingConfig(
         spec_version=spec_version,
         rules=rules,
@@ -117,4 +122,5 @@ def load_mapping_config(path: Path) -> MappingConfig:
         creation_date=creation_date,
         dataset_type=dataset_type,
         dataset_instance_name=dataset_instance_name,
+        skipped_columns=skipped_columns,
     )

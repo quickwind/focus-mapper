@@ -343,6 +343,9 @@ def main(argv: list[str] | None = None) -> int:
     except FocusReportError as e:
         logger.error("%s", e)
         return 1
+    except KeyboardInterrupt:
+        print("\n\nWizard interrupted by user. Exiting...")
+        return 130  # Standard exit code for Ctrl+C
     except Exception as e:
         logger.exception("Unexpected error occurred")
         return 1

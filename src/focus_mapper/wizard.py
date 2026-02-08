@@ -64,6 +64,7 @@ def run_wizard(
         # We need to construct the *initial* list of rules from resume_config
         rules = list(resume_config.rules)
         existing_targets = {r.target for r in rules}
+        skipped_targets = set(resume_config.skipped_columns or [])
     else:
         # Prompt for dataset details EARLY (v1.3+)
         dataset_type = "CostAndUsage"
@@ -78,6 +79,7 @@ def run_wizard(
         creation_date = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         rules = []
         existing_targets = set()
+        skipped_targets = set()
 
     # Define helper to build current config for saving
     def build_current_config() -> MappingConfig:
@@ -88,6 +90,7 @@ def run_wizard(
             creation_date=creation_date,
             dataset_type=dataset_type,
             dataset_instance_name=dataset_instance_name,
+            skipped_columns=sorted(list(skipped_targets)),
         )
 
     targets = _select_targets(
@@ -99,6 +102,8 @@ def run_wizard(
 
     for target in targets:
         if target.name in existing_targets:
+            continue
+        if target.name in skipped_targets:
             continue
 
         suggested = _suggest_column(target.name, normalized)
@@ -128,9 +133,18 @@ def run_wizard(
                     validation=validation,
                 )
             )
+            # If it was previously skipped (edge case if logic changes), unskip it
+            skipped_targets.discard(target.name)
+            
             # Incremental Save
             if save_callback:
                 save_callback(build_current_config())
+        else:
+             # User skipped (or provided no steps)
+             # We record this as explicitly skipped so we don't prompt again on resume
+             skipped_targets.add(target.name)
+             if save_callback:
+                 save_callback(build_current_config())
 
     # Extension columns (always append to end if not present? Or allow adding more?)
     # For resume, we usually assume existing ones are done. We can prompt for *new* ones.
@@ -484,7 +498,6 @@ def _prompt_extension_columns(
     *, columns: list[str], prompt: PromptFunc, existing_targets: set[str] | None = None
 ) -> list[MappingRule]:
     # If existing_targets provided, we assume we might be resuming.
-    # Should we prompt immediately or assume user wants to add more?
     # Spec says: "ask for extensions".
     
     rules: list[MappingRule] = []
@@ -493,30 +506,74 @@ def _prompt_extension_columns(
         if add not in {"y", "yes"}:
             return rules
 
-        name = prompt("Extension column name (must start with x_): ").strip()
-        if not name.startswith("x_"):
-            print("Name must start with x_. Skipping.\n")
-            continue
-        
+        suffix = prompt("Extension column suffix (appended to x_): ").strip()
+        if not suffix:
+             print("Suffix cannot be empty.\n")
+             continue
+             
+        # Auto-prefix x_ if not present
+        if suffix.startswith("x_"):
+            name = suffix
+        else:
+            name = f"x_{suffix}"
+
         if existing_targets and name in existing_targets:
             print(f"Extension '{name}' is already defined. Skipping.\n")
             continue
 
         desc = prompt("Description (optional): ").strip() or None
-        col = _pick_column(columns, prompt=prompt, suggested=None)
-        validation = _prompt_column_validation(
-            target_name=name,
-            data_type=None,
-            prompt=prompt,
+        
+        # Prompt for data type
+        data_type = _prompt_choice(
+             prompt,
+             "Column type [string|decimal|datetime|json]: ",
+             {"string", "decimal", "datetime", "json"},
+             default="string",
         )
-        rules.append(
-            MappingRule(
-                target=name,
-                steps=[{"op": "from_column", "column": col}],
-                description=desc,
-                validation=validation,
+        if not data_type:
+            data_type = "string"
+
+        # Create a temporary FocusColumnSpec to reuse _prompt_for_steps
+        # Extensions are always Optional level essentially
+        temp_spec = FocusColumnSpec(
+             name=name,
+             feature_level="Optional",
+             allows_nulls=True, # Extensions are usually nullable
+             data_type=data_type,
+             description=desc,
+        )
+        
+        print(f"Configuring extension column: {name} ({data_type})")
+        steps = _prompt_for_steps(
+             target=temp_spec,
+             columns=columns,
+             suggested=None,
+             prompt=prompt,
+             # We don't have sample_df passed here easily unless we change signature
+             # For now, extensions won't have live preview unless we pass sample_df
+        )
+
+        if steps:
+            steps = _maybe_append_cast(
+                steps=steps,
+                data_type=data_type,
+                numeric_scale=None, # Prompt for scale? defaulting to None for now
             )
-        )
+            validation = _prompt_column_validation(
+                target_name=name,
+                data_type=data_type,
+                prompt=prompt,
+            )
+            rules.append(
+                MappingRule(
+                    target=name,
+                    steps=steps,
+                    description=desc,
+                    validation=validation,
+                )
+            )
+        else:
+            print("No steps configured. Skipping extension column.\n")
 
 
 def _pick_column(
