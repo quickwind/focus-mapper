@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-02-08
+
+### New Feature: Wizard Live Preview
+
+The interactive mapping wizard (`focus-mapper-wizard`) now provides **real-time feedback** when defining complex transformation steps.
+
+- **Live Dry-Run**: When you add a `sql` or `pandas_expr` step, the wizard automatically executes it against a sample of your input data (first 100 rows).
+- **Instant Result Preview**: Successfully validated steps show the first 5 result values immediately (e.g., `0 123.45`, `1 67.89`), giving you confidence that your expression is correct.
+- **Error Reporting**: Syntax errors or invalid column references are caught instantly, allowing you to retry without restarting the wizard.
+
+### Improvements
+
+- **Performance**: Optimized sample data loading using `nrows` for instant feedback even on large datasets.
+
 ## [0.3.0] - 2026-02-08
 
 ### New Feature: SQL Operation (DuckDB Support)

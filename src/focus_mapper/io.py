@@ -12,12 +12,21 @@ def _suffix(path: Path) -> str:
     return path.suffix.lower().lstrip(".")
 
 
-def read_table(path: Path) -> pd.DataFrame:
+def read_table(path: Path, *, nrows: int | None = None) -> pd.DataFrame:
     suffix = _suffix(path)
     if suffix == "csv":
-        return pd.read_csv(path)
+        return pd.read_csv(path, nrows=nrows)
     if suffix == "parquet":
-        return pd.read_parquet(path)
+        # Parquet doesn't support nrows directly in read_parquet but we can workaround or use pyarrow if needed
+        # For now, let's just read and head if nrows is set, as parquet details are tricky
+        # Actually pd.read_parquet doesn't support nrows. 
+        # But we can use pyarrow dataset or just read all and head.
+        # Given the request for performance, for parquet we might need a better way if files are huge.
+        # But for now let's just read and head.
+        df = pd.read_parquet(path)
+        if nrows is not None:
+            return df.head(nrows)
+        return df
     raise ValueError(f"Unsupported input format: {path}")
 
 

@@ -165,6 +165,14 @@ def main(argv: list[str] | None = None) -> int:
                     return 2
                 input_path = _prompt_input_path(prompt)
 
+        # Load sample for preview
+        sample_df = None
+        try:
+            sample_df = read_table(input_path, nrows=100)
+        except Exception:
+            # Ignore errors in sample loading; preview will just be disabled
+            pass
+
         output_path = args.output
         while output_path is None:
             with path_completion():
@@ -194,6 +202,7 @@ def main(argv: list[str] | None = None) -> int:
             include_optional=include_optional,
             include_recommended=include_recommended,
             include_conditional=include_conditional,
+            sample_df=sample_df,
         )
 
         try:

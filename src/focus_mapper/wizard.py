@@ -46,6 +46,7 @@ def run_wizard(
     include_optional: bool,
     include_recommended: bool,
     include_conditional: bool,
+    sample_df: pd.DataFrame | None = None,
 ) -> WizardResult:
     columns = list(input_df.columns)
     normalized = {_norm(c): c for c in columns}
@@ -63,7 +64,11 @@ def run_wizard(
     for target in targets:
         suggested = _suggest_column(target.name, normalized)
         steps = _prompt_for_steps(
-            target=target, columns=columns, suggested=suggested, prompt=prompt
+            target=target, 
+            columns=columns, 
+            suggested=suggested, 
+            prompt=prompt,
+            sample_df=sample_df,
         )
         if steps:
             steps = _maybe_append_cast(
@@ -144,6 +149,7 @@ def _prompt_for_steps(
     columns: list[str],
     suggested: str | None,
     prompt: PromptFunc,
+    sample_df: pd.DataFrame | None = None,
 ) -> list[dict]:
     header = f"{'=' * 50}\nTarget column: \n\t{target.name} ({target.feature_level})"
     if target.description:
@@ -166,6 +172,10 @@ def _prompt_for_steps(
     is_string = data_type == "string"
     
     while True:
+        choice = ""
+        step_config: dict | None = None
+        op_type = ""
+
         if not has_series:
             # Build menu options based on column properties
             init_options: list[tuple[str, str]] = [
@@ -206,209 +216,215 @@ def _prompt_for_steps(
             if choice == "done":
                 return steps
 
-        if not has_series:
-            if choice == "from_column":
-                col = _pick_column(columns, prompt=prompt, suggested=suggested)
-                steps.append({"op": "from_column", "column": col})
-                has_series = True
-            elif choice == "const":
-                allowed = target.allowed_values or []
-                if allowed:
-                    print(
-                        "Allowed values:\n"
-                        + "\n".join(f"- {v}" for v in allowed)
-                        + "\n"
-                    )
-                    while True:
-                        with value_completion(allowed):
-                            value = prompt("Choose allowed value: ").strip()
-                        if value in allowed:
-                            steps.append({"op": "const", "value": value})
-                            break
-                        print(f"Value must be one of: {', '.join(allowed)}\n")
-                else:
-                    while True:
-                        vf_hint = ""
-                        if target.value_format:
-                            vf_hint = f" (Format: {target.value_format})"
-                        elif data_type and not is_string:
-                            vf_hint = f" (Type: {data_type})"
+        # --- Gather Step Inputs ---
+        if choice == "from_column":
+            col = _pick_column(columns, prompt=prompt, suggested=suggested)
+            op_type = "from_column"
+            step_config = {"column": col}
+        elif choice == "const":
+            # ... existing const logic ...
+            # To keep diff clean, we will reuse existing logic flow but wrapped
+            # actually we need to refactor slightly to separate input gathering from appending
+            # for preview support.
+            # But the existing code has complex logic inside the ifs (like loop for allowed values).
+            # We can just copy the logic or refactor.
+            # Given the constraints, let's keep it inline but assign to `step_config`.
+            
+            allowed = target.allowed_values or []
+            if allowed:
+                print(
+                    "Allowed values:\n"
+                    + "\n".join(f"- {v}" for v in allowed)
+                    + "\n"
+                )
+                while True:
+                    with value_completion(allowed):
+                        value = prompt("Choose allowed value: ").strip()
+                    if value in allowed:
+                        op_type = "const"
+                        step_config = {"value": value}
+                        break
+                    print(f"Value must be one of: {', '.join(allowed)}\n")
+            else:
+                while True:
+                    vf_hint = ""
+                    if target.value_format:
+                        vf_hint = f" (Format: {target.value_format})"
+                    elif data_type and not is_string:
+                        vf_hint = f" (Type: {data_type})"
 
-                        value = prompt(f"Enter constant value{vf_hint}: ")
-                        
-                        # For non-nullable string columns, reject empty/whitespace-only
-                        if is_string and not allow_null:
-                            if value == "" or value.strip() == "":
-                                print(
-                                    "Error: Empty strings and whitespace-only strings are not allowed "
-                                    "for non-nullable string columns (per FOCUS spec).\n"
-                                )
-                                continue
-                        
-                        # Validation (for all types if value_format present, or non-strings if no format)
-                        should_validate = (
-                            (value and not is_string and data_type) or 
-                            (value and target.value_format)
-                        )
-                        
-                        if should_validate:
-                            is_valid, error_msg = _validate_const_value(
-                                value, data_type, target.value_format
+                    value = prompt(f"Enter constant value{vf_hint}: ")
+                    
+                    if is_string and not allow_null:
+                        if value == "" or value.strip() == "":
+                            print(
+                                "Error: Empty strings and whitespace-only strings are not allowed "
+                                "for non-nullable string columns (per FOCUS spec).\n"
                             )
-                            if not is_valid:
-                                print(f"Error: {error_msg}\n")
-                                continue
-                        
-                        steps.append({"op": "const", "value": value})
-                        break
-                has_series = True
-            elif choice == "null":
-                steps.append({"op": "null"})
-                has_series = True
-            elif choice == "coalesce":
-                cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
-                steps.append({"op": "coalesce", "columns": cols})
-                has_series = True
-            elif choice == "map_values":
-                col = _pick_column(columns, prompt=prompt, suggested=suggested)
-                mapping: dict[str, str] = {}
-                print("Enter mapping pairs (empty key to finish).")
-                while True:
-                    key = prompt("  from: ").strip()
-                    if not key:
-                        break
-                    val = prompt("  to: ").strip()
-                    mapping[key] = val
-                default = prompt("Default value (empty for null): ").strip()
-                step = {"op": "map_values", "column": col, "mapping": mapping}
-                if default != "":
-                    step["default"] = default
-                steps.append(step)
-                has_series = True
-            elif choice == "concat":
-                cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
-                sep = prompt("Separator (empty for none): ").strip()
-                steps.append({"op": "concat", "columns": cols, "sep": sep})
-                has_series = True
-            elif choice == "math":
-                operator = prompt("Operator [add|sub|mul|div]: ").strip()
-                operands: list[dict] = []
-                while True:
-                    kind = prompt(
-                        "Add operand type [column|const] (empty to finish): "
-                    ).strip()
-                    if not kind:
-                        break
-                    if kind == "column":
-                        col = _pick_column(columns, prompt=prompt, suggested=suggested)
-                        operands.append({"column": col})
-                    elif kind == "const":
-                        val = prompt("Constant value: ").strip()
-                        operands.append({"const": val})
-                steps.append({"op": "math", "operator": operator, "operands": operands})
-                has_series = True
-            elif choice == "pandas_expr":
-                expr = prompt(
-                    "Enter pandas expression (use df, pd, and/or current): "
-                ).strip()
-                steps.append({"op": "pandas_expr", "expr": expr})
-                has_series = True
-            elif choice == "sql":
-                mode = prompt_menu(prompt, "SQL mode:", [("expr", "Expression (simple)"), ("query", "Query (full SQL)")])
-                if mode == "expr":
-                    print("Enter a DuckDB SQL expression using column names directly.")
-                    print("Examples: 'a + b', 'CASE WHEN x = 1 THEN y ELSE z END', 'UPPER(name)'")
-                    expr = prompt("SQL expression: ").strip()
-                    steps.append({"op": "sql", "expr": expr})
-                else:
-                    print("Enter a full DuckDB SQL query. Use table name 'src'. Must return one column.")
-                    print("Example: 'SELECT a + b FROM src'")
-                    query = prompt("SQL query: ").strip()
-                    steps.append({"op": "sql", "query": query})
-                has_series = True
+                            continue
+                    
+                    should_validate = (
+                        (value and not is_string and data_type) or 
+                        (value and target.value_format)
+                    )
+                    
+                    if should_validate:
+                        is_valid, error_msg = _validate_const_value(
+                            value, data_type, target.value_format
+                        )
+                        if not is_valid:
+                            print(f"Error: {error_msg}\n")
+                            continue
+                    
+                    op_type = "const"
+                    step_config = {"value": value}
+                    break
 
-        else:
-            if choice == "map_values":
-                mapping: dict[str, str] = {}
-                print("Enter mapping pairs (empty key to finish).")
-                while True:
-                    key = prompt("  from: ").strip()
-                    if not key:
-                        break
-                    val = prompt("  to: ").strip()
-                    mapping[key] = val
-                default = prompt("Default value (empty for null): ").strip()
-                step = {"op": "map_values", "mapping": mapping}
-                if default != "":
-                    step["default"] = default
-                steps.append(step)
-            elif choice == "cast":
-                to = prompt(
-                    "Cast to type [string|float|int|datetime|decimal]: "
+        elif choice == "null":
+            op_type = "null"
+            step_config = {}
+        elif choice == "coalesce":
+            cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
+            op_type = "coalesce"
+            step_config = {"columns": cols}
+        elif choice == "map_values":
+            col = None
+            if not has_series:
+                 col = _pick_column(columns, prompt=prompt, suggested=suggested)
+            mapping: dict[str, str] = {}
+            print("Enter mapping pairs (empty key to finish).")
+            while True:
+                key = prompt("  from: ").strip()
+                if not key:
+                    break
+                val = prompt("  to: ").strip()
+                mapping[key] = val
+            default = prompt("Default value (empty for null): ").strip()
+            op_type = "map_values"
+            step_config = {"mapping": mapping}
+            if col:
+                step_config["column"] = col
+            if default != "":
+                step_config["default"] = default
+
+        elif choice == "concat":
+            cols = _pick_columns(columns, prompt=prompt, suggested=suggested)
+            sep = prompt("Separator (empty for none): ").strip()
+            op_type = "concat"
+            step_config = {"columns": cols, "sep": sep}
+        elif choice == "math":
+            operator = prompt("Operator [add|sub|mul|div]: ").strip()
+            operands: list[dict] = []
+            while True:
+                kind_prompt = "Add operand type [column|const] (empty to finish): "
+                if has_series:
+                     kind_prompt = "Add operand type [current|column|const] (empty to finish): "
+                
+                kind = prompt(kind_prompt).strip()
+                if not kind:
+                    break
+                if kind == "current" and has_series:
+                    operands.append({"current": True})
+                elif kind == "column":
+                    col = _pick_column(columns, prompt=prompt, suggested=suggested)
+                    operands.append({"column": col})
+                elif kind == "const":
+                    val = prompt("Constant value: ").strip()
+                    operands.append({"const": val})
+            op_type = "math"
+            step_config = {"operator": operator, "operands": operands}
+
+        elif choice == "pandas_expr":
+            expr = prompt(
+                "Enter pandas expression (use df, pd, and/or current): "
+            ).strip()
+            op_type = "pandas_expr"
+            step_config = {"expr": expr}
+
+        elif choice == "sql":
+            mode = prompt_menu(prompt, "SQL mode:", [("expr", "Expression (simple)"), ("query", "Query (full SQL)")])
+            op_type = "sql"
+            if mode == "expr":
+                print("Enter a DuckDB SQL expression using column names directly.")
+                print("Examples: 'a + b', 'CASE WHEN x = 1 THEN y ELSE z END', 'UPPER(name)'")
+                expr = prompt("SQL expression: ").strip()
+                step_config = {"expr": expr}
+            else:
+                print("Enter a full DuckDB SQL query. Use table name 'src'. Must return one column.")
+                print("Example: 'SELECT a + b FROM src'")
+                query = prompt("SQL query: ").strip()
+                step_config = {"query": query}
+
+        elif choice == "cast":
+             to = prompt(
+                "Cast to type [string|float|int|datetime|decimal]: "
+            ).strip()
+             op_type = "cast"
+             step_config = {"to": to}
+             if to == "decimal":
+                scale = prompt("Decimal scale (int, empty for none): ").strip()
+                if scale != "":
+                    step_config["scale"] = int(scale)
+                precision = prompt(
+                    "Decimal precision (int, empty for none): "
                 ).strip()
-                step: dict = {"op": "cast", "to": to}
-                if to == "decimal":
-                    scale = prompt("Decimal scale (int, empty for none): ").strip()
-                    if scale != "":
-                        step["scale"] = int(scale)
-                    precision = prompt(
-                        "Decimal precision (int, empty for none): "
-                    ).strip()
-                    if precision != "":
-                        step["precision"] = int(precision)
-                steps.append(step)
-            elif choice == "round":
-                ndigits = prompt_int(prompt, "Round ndigits (int, default 0): ", default=0)
-                steps.append({"op": "round", "ndigits": ndigits if ndigits is not None else 0})
-            elif choice == "math":
-                operator = prompt("Operator [add|sub|mul|div]: ").strip()
-                operands: list[dict] = []
-                while True:
-                    kind = prompt(
-                        "Add operand type [current|column|const] (empty to finish): "
-                    ).strip()
-                    if not kind:
-                        break
-                    if kind == "current":
-                        operands.append({"current": True})
-                    elif kind == "column":
-                        col = _pick_column(columns, prompt=prompt, suggested=suggested)
-                        operands.append({"column": col})
-                    elif kind == "const":
-                        val = prompt("Constant value: ").strip()
-                        operands.append({"const": val})
-                steps.append({"op": "math", "operator": operator, "operands": operands})
-            elif choice == "when":
-                col = _pick_column(columns, prompt=prompt, suggested=suggested)
-                value = prompt("If value equals: ").strip()
-                then_value = prompt("Then value: ").strip()
-                else_value = prompt("Else value (empty for null): ").strip()
-                step: dict = {
-                    "op": "when",
-                    "column": col,
-                    "value": value,
-                    "then": then_value,
-                }
-                if else_value != "":
-                    step["else"] = else_value
-                steps.append(step)
-            elif choice == "pandas_expr":
-                expr = prompt(
-                    "Enter pandas expression (use df, pd, and/or current): "
-                ).strip()
-                steps.append({"op": "pandas_expr", "expr": expr})
-            elif choice == "sql":
-                mode = prompt_menu(prompt, "SQL mode:", [("expr", "Expression (simple)"), ("query", "Query (full SQL)")])
-                if mode == "expr":
-                    print("Enter a DuckDB SQL expression using column names directly.")
-                    print("Examples: 'a + b', 'CASE WHEN x = 1 THEN y ELSE z END', 'UPPER(name)'")
-                    expr = prompt("SQL expression: ").strip()
-                    steps.append({"op": "sql", "expr": expr})
-                else:
-                    print("Enter a full DuckDB SQL query. Use table name 'src'. Must return one column.")
-                    print("Example: 'SELECT a + b FROM src'")
-                    query = prompt("SQL query: ").strip()
-                    steps.append({"op": "sql", "query": query})
+                if precision != "":
+                    step_config["precision"] = int(precision)
+
+        elif choice == "round":
+            ndigits = prompt_int(prompt, "Round ndigits (int, default 0): ", default=0)
+            op_type = "round"
+            step_config = {"ndigits": ndigits if ndigits is not None else 0}
+
+        elif choice == "when":
+             col = _pick_column(columns, prompt=prompt, suggested=suggested)
+             value = prompt("If value equals: ").strip()
+             then_value = prompt("Then value: ").strip()
+             else_value = prompt("Else value (empty for null): ").strip()
+             op_type = "when"
+             step_config = {
+                "column": col,
+                "value": value,
+                "then": then_value,
+             }
+             if else_value != "":
+                step_config["else"] = else_value
+
+        # --- Preview & Validation ---
+        if step_config:
+            if sample_df is not None and op_type in {"sql", "pandas_expr"}:
+                try:
+                    from .mapping.ops import apply_steps
+                    
+                    # We need to construct a temp list of previous rules + current step?
+                    # No, apply_steps works on one target's chain.
+                    # We need to replicate the *current* series state.
+                    # This is tricky if we don't have the intermediate series from previous steps.
+                    # But wait, apply_steps takes a list of steps and runs them on DF.
+                    # So we can just run ALL steps accumulated so far + this new one.
+                    
+                    preview_steps = steps + [{"op": op_type, **step_config}]
+                    
+                    print(f"Running validation on {len(sample_df)} rows...")
+                    # We use a dummy target name for preview
+                    preview_series = apply_steps(
+                        sample_df, 
+                        steps=preview_steps, 
+                        target=target.name
+                    )
+                    
+                    print("\nPreview results (first 5):")
+                    print(preview_series.head(5).to_string())
+                    print("\n✅ Step validation successful.")
+                    
+                except Exception as e:
+                    print(f"\n❌ Validation failed: {e}")
+                    # For sql/pandas_expr, we often want to fix the query immediately
+                    if not prompt_bool(prompt, "Do you want to keep this step despite the error? [y/N] ", default=False):
+                        continue
+
+            steps.append({"op": op_type, **step_config})
+            has_series = True
 
 
 

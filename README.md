@@ -257,6 +257,8 @@ Tip: column name prompts support tab‑completion (case‑insensitive).
 The wizard will also show a summary of default validation settings and let you override them globally or per column.
 For standard FOCUS columns, the wizard does not offer a `cast` option because the generator will coerce to the spec type automatically.
 
+
+
 ## Mapping YAML Specification
 
 The mapping file is a YAML document that defines how your input columns are transformed into FinOps FOCUS compliant columns.
@@ -465,6 +467,13 @@ mappings:
 | `when` | Conditional assignment: if `column == value` then `then`, else `else`. | `column`, `value`, `then`, `else` (optional) | `- op: when`<br>`  column: "charge_category"`<br>`  value: "Tax"`<br>`  then: "Y"`<br>`  else: "N"` |
 | `sql` | **Recommended.** Execute a DuckDB SQL expression. Cleaner syntax and better performance than `pandas_expr`. Use column names directly. | `expr` (string) or `query` (full SQL) | `- op: sql`<br>`  expr: "a + b"` |
 | `pandas_expr` | Evaluate a safe pandas expression. Use `df` for the input DataFrame, `current` for the prior series, and `pd` for pandas helpers. Must return a Series or scalar. | `expr` (string) | `- op: pandas_expr`<br>`  expr: "df['a'] + df['b']"` |
+
+
+### Automatic Dry-Run for sql and pandas_expr
+
+When defining `sql` or `pandas_expr` steps in the wizard, you get a **real-time preview**:
+- **Live Dry-Run**: Try applying it for first 100 rows of input.
+- **Instant Feedback**: Shows first 5 result values on success, or error details on failure.
 
 ### sql Operation (Recommended)
 
