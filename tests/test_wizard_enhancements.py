@@ -96,7 +96,7 @@ def test_wizard_extension_enhancements(mock_spec, sample_df):
         "y",            # 5. Add extension?
         "test",         # 6. Suffix
         "desc",         # 7. Desc
-        "string",       # 8. Type
+        # "string",     # 8. Type (REMOVED: now handled by prompt_menu mock)
         "B",            # 9. Ext Val
         "n",            # 10. Ext Valid
         "n"             # 11. Add another extension?
@@ -106,9 +106,10 @@ def test_wizard_extension_enhancements(mock_spec, sample_df):
     # 1. Mandatory (Init) -> "const"
     # 2. Mandatory (Add Step) -> "done"
     # 3. Optional (Init) -> "skip"
-    # 4. Extension (Init) -> "const"
-    # 5. Extension (Add Step) -> "done"
-    menu_choices = ["const", "done", "skip", "const", "done"]
+    # 4. Extension (Type) -> "string"  <-- NEW
+    # 5. Extension (Init) -> "const"
+    # 6. Extension (Add Step) -> "done"
+    menu_choices = ["const", "done", "skip", "string", "const", "done"]
     menu_iter = iter(menu_choices)
 
     def menu_side_effect(prompt, header, options, default=None):
@@ -200,11 +201,20 @@ def test_extension_autosave(mock_spec, sample_df):
     inputs = [
         "TestDS", "y", 
         "A", "n", 
-        "y", "ext1", "desc1", "string", "B", "n", 
+        "y", "ext1", "desc1", 
+        # "string",  <-- REMOVED: now handled by prompt_menu mock
+        "B", "n", 
         "n"
     ]
     
-    menu_choices = ["const", "done", "skip", "const", "done"]
+    # Menu choices:
+    # 1. Mandatory (Init) -> "const"
+    # 2. Mandatory (Add Step) -> "done"
+    # 3. Optional (Init) -> "skip"
+    # 4. Extension (Type) -> "string"  <-- NEW
+    # 5. Extension (Init) -> "const"
+    # 6. Extension (Add Step) -> "done"
+    menu_choices = ["const", "done", "skip", "string", "const", "done"]
     menu_iter = iter(menu_choices)
     def menu_side_effect(prompt, header, options, default=None):
         try:

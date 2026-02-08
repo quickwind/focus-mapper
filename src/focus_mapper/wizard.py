@@ -539,10 +539,15 @@ def _prompt_extension_columns(
         desc = prompt("Description (optional): ").strip() or None
         
         # Prompt for data type
-        data_type = _prompt_choice(
+        data_type = prompt_menu(
              prompt,
-             "Column type [string|decimal|datetime|json]: ",
-             {"string", "decimal", "datetime", "json"},
+             "Column type:",
+             [
+                 ("string", "String"),
+                 ("decimal", "Decimal"),
+                 ("datetime", "DateTime"),
+                 ("json", "JSON"),
+             ],
              default="string",
         )
         if not data_type:
