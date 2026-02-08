@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-02-08
+
+### Added
+- **Resumable Wizard**: The wizard now prompts for an output path early and can resume from an existing mapping file, skipping already configured columns.
+- **Incremental Saving**: The wizard saves the mapping file after every successful column definition to prevent data loss.
+- **CLI**: Added `--spec-dir` argument to `focus-mapper-wizard` to consistent with other tools.
+
+### Fixed
+- **Null Operation**: Fixed a bug where selecting the `null` operation had no effect when `allow_nulls: true`.
+- **Live Preview Validation**: The wizard's "Live Preview" now validates results against column constraints (e.g., checks for nulls in mandatory columns) and warns on type mismatches.
+- **Prompt Ordering**: Moved Dataset Instance Name prompt to the start of the wizard for v1.3+ specs.
+
+### Refactored
+- **Spec Resolution**: Consolidated logic for resolving external spec directories into a reusable helper `_resolve_spec_search_paths`, eliminating code duplication in `focus_mapper/spec.py`.
+
 ## [0.4.0] - 2026-02-08
 
 ### New Feature: Wizard Live Preview

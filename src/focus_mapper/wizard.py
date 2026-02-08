@@ -47,11 +47,48 @@ def run_wizard(
     include_recommended: bool,
     include_conditional: bool,
     sample_df: pd.DataFrame | None = None,
+    resume_config: MappingConfig | None = None,
+    save_callback: Callable[[MappingConfig], None] | None = None,
 ) -> WizardResult:
     columns = list(input_df.columns)
     normalized = {_norm(c): c for c in columns}
 
-    default_validation = _prompt_validation_defaults(prompt=prompt)
+    # -- Initialization Logic --
+    if resume_config:
+        print(f"Resuming configuration with {len(resume_config.rules)} existing rules.")
+        default_validation = resume_config.validation_defaults
+        dataset_type = resume_config.dataset_type
+        dataset_instance_name = resume_config.dataset_instance_name
+        creation_date = resume_config.creation_date
+        
+        # We need to construct the *initial* list of rules from resume_config
+        rules = list(resume_config.rules)
+        existing_targets = {r.target for r in rules}
+    else:
+        # Prompt for dataset details EARLY (v1.3+)
+        dataset_type = "CostAndUsage"
+        dataset_instance_name = None
+        if spec.version >= "1.3":
+            # For now, hardcode CostAndUsage as per requirement
+            # dataset_type = prompt_menu(...)
+            print(f"Using Dataset Type: {dataset_type}")
+            dataset_instance_name = prompt("Dataset Instance Name: ").strip() or None
+
+        default_validation = _prompt_validation_defaults(prompt=prompt)
+        creation_date = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        rules = []
+        existing_targets = set()
+
+    # Define helper to build current config for saving
+    def build_current_config() -> MappingConfig:
+        return MappingConfig(
+            spec_version=f"v{spec.version}",
+            rules=rules,
+            validation_defaults=default_validation,
+            creation_date=creation_date,
+            dataset_type=dataset_type,
+            dataset_instance_name=dataset_instance_name,
+        )
 
     targets = _select_targets(
         spec,
@@ -59,9 +96,11 @@ def run_wizard(
         include_recommended=include_recommended,
         include_conditional=include_conditional,
     )
-    rules: list[MappingRule] = []
 
     for target in targets:
+        if target.name in existing_targets:
+            continue
+
         suggested = _suggest_column(target.name, normalized)
         steps = _prompt_for_steps(
             target=target, 
@@ -89,35 +128,31 @@ def run_wizard(
                     validation=validation,
                 )
             )
+            # Incremental Save
+            if save_callback:
+                save_callback(build_current_config())
 
-    # Extension columns
-    ext_rules = _prompt_extension_columns(columns=columns, prompt=prompt)
-    rules.extend(ext_rules)
-
-    # Capture creation timestamp
-    creation_date = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-
-    # v1.3+ metadata: dataset_type and dataset_instance_name
-    dataset_type: str = "CostAndUsage"
-    dataset_instance_name: str | None = None
-    if spec.version >= "1.3":
-        dataset_type = prompt_menu(
-            prompt,
-            "Select Dataset Type:",
-            [("CostAndUsage", "CostAndUsage"), ("ContractCommitment", "ContractCommitment")],
-            default="CostAndUsage",
-        )
-        dataset_instance_name = prompt("Dataset Instance Name: ").strip() or None
+    # Extension columns (always append to end if not present? Or allow adding more?)
+    # For resume, we usually assume existing ones are done. We can prompt for *new* ones.
+    # But usually extension columns are added at end.
+    # The simple resume logic is: replay what we have, then continue with standard targets, then ask for extensions.
+    # Issues: if user resumed, they might want to add MORE extensions.
+    # The current `ext_rules` logic loops until user says no.
+    current_ext_targets = {r.target for r in rules if r.target.startswith("x_")}
+    
+    # We only prompt for extensions if we are at the end of the standard flow
+    ext_rules = _prompt_extension_columns(
+        columns=columns, 
+        prompt=prompt, 
+        existing_targets=current_ext_targets
+    )
+    for rule in ext_rules:
+        rules.append(rule)
+        if save_callback:
+             save_callback(build_current_config())
 
     return WizardResult(
-        mapping=MappingConfig(
-            spec_version=f"v{spec.version}",
-            rules=rules,
-            validation_defaults=default_validation,
-            creation_date=creation_date,
-            dataset_type=dataset_type,
-            dataset_instance_name=dataset_instance_name,
-        ),
+        mapping=build_current_config(),
         selected_targets=[t.name for t in targets],
     )
 
@@ -391,17 +426,11 @@ def _prompt_for_steps(
                 step_config["else"] = else_value
 
         # --- Preview & Validation ---
-        if step_config:
+        # --- Preview & Validation ---
+        if step_config is not None:
             if sample_df is not None and op_type in {"sql", "pandas_expr"}:
                 try:
                     from .mapping.ops import apply_steps
-                    
-                    # We need to construct a temp list of previous rules + current step?
-                    # No, apply_steps works on one target's chain.
-                    # We need to replicate the *current* series state.
-                    # This is tricky if we don't have the intermediate series from previous steps.
-                    # But wait, apply_steps takes a list of steps and runs them on DF.
-                    # So we can just run ALL steps accumulated so far + this new one.
                     
                     preview_steps = steps + [{"op": op_type, **step_config}]
                     
@@ -413,9 +442,32 @@ def _prompt_for_steps(
                         target=target.name
                     )
                     
+                    # Enhanced Validation: Check Nulls & Types
+                    validation_errors = []
+                    
+                    # 1. Nullability Check
+                    if not allow_null and preview_series.hasnans:
+                         validation_errors.append("Result contains nulls but column is Mandatory (not nullable).")
+                    
+                    # 2. Basic Type Compatibility (soft warning)
+                    if not preview_series.empty:
+                         dtype = preview_series.dtype
+                         if data_type == "decimal" and not pd.api.types.is_numeric_dtype(dtype):
+                              validation_errors.append(f"Expected decimal/numeric type, got {dtype}.")
+                         elif data_type == "datetime" and not pd.api.types.is_datetime64_any_dtype(dtype):
+                              validation_errors.append(f"Expected datetime type, got {dtype}.")
+
                     print("\nPreview results (first 5):")
                     print(preview_series.head(5).to_string())
-                    print("\n✅ Step validation successful.")
+                    
+                    if validation_errors:
+                        print("\n⚠️  Validation Issues:")
+                        for err in validation_errors:
+                            print(f"  - {err}")
+                        if not prompt_bool(prompt, "\nDo you want to keep this step despite issues? [y/N] ", default=False):
+                            continue
+                    else:
+                        print("\n✅ Step validation successful.")
                     
                 except Exception as e:
                     print(f"\n❌ Validation failed: {e}")
@@ -429,8 +481,12 @@ def _prompt_for_steps(
 
 
 def _prompt_extension_columns(
-    *, columns: list[str], prompt: PromptFunc
+    *, columns: list[str], prompt: PromptFunc, existing_targets: set[str] | None = None
 ) -> list[MappingRule]:
+    # If existing_targets provided, we assume we might be resuming.
+    # Should we prompt immediately or assume user wants to add more?
+    # Spec says: "ask for extensions".
+    
     rules: list[MappingRule] = []
     while True:
         add = prompt("Add x_ extension column? [y/N] ").strip().lower()
@@ -441,6 +497,11 @@ def _prompt_extension_columns(
         if not name.startswith("x_"):
             print("Name must start with x_. Skipping.\n")
             continue
+        
+        if existing_targets and name in existing_targets:
+            print(f"Extension '{name}' is already defined. Skipping.\n")
+            continue
+
         desc = prompt("Description (optional): ").strip() or None
         col = _pick_column(columns, prompt=prompt, suggested=None)
         validation = _prompt_column_validation(

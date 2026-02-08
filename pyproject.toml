@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "focus-mapper"
-version = "0.4.0"
+version = "0.5.0"
 description = "Generate FinOps FOCUS™ compliant reports from any billing data using simple YAML mapping configuration."
 readme = "README.md"
 requires-python = ">=3.10"

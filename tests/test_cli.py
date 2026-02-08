@@ -162,9 +162,9 @@ def test_wizard_cli_prompts_for_missing_args(tmp_path: Path, monkeypatch) -> Non
     )
 
     inputs_list = [
-        "v1.2",
         "tests/fixtures/telemetry_small.csv",
         str(out),
+        "v1.2",
         "n",
         "n",
         "n",

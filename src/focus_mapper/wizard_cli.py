@@ -12,7 +12,7 @@ from .io import read_table
 from .mapping.config import MappingConfig
 from .spec import load_focus_spec, list_available_spec_versions
 from .wizard import run_wizard, PromptFunc
-from .wizard_lib import prompt_menu
+from .wizard_lib import prompt_menu, prompt_bool
 
 logger = logging.getLogger("focus_mapper.wizard")
 
@@ -50,6 +50,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Set the logging level (default: INFO)",
+    )
+    p.add_argument(
+        "--spec-dir",
+        type=_path,
+        help="Path to external directory containing custom spec JSON files",
     )
     p.add_argument("--spec", help="FOCUS spec version (default: v1.3)")
     p.add_argument("--input", type=_path, help="Input CSV or Parquet")
@@ -114,12 +119,74 @@ def main(argv: list[str] | None = None) -> int:
     def prompt(text: str) -> str:
         return input(text)
 
-    try:
+    # 1. Input File
+    input_path = args.input or _prompt_input_path(prompt)
+
+    # Read and validate input file (do this early to fail fast)
+    df = None
+    while df is None:
+        if not input_path.exists():
+            _eprint(f"Error: input file not found: {input_path}")
+            if args.input:
+                return 2
+            input_path = _prompt_input_path(prompt)
+            continue
+
+        try:
+            logger.debug("Reading input dataset: %s", input_path)
+            df = read_table(input_path)
+        except Exception as e:
+            _eprint(f"Error: failed to read input file: {e}")
+            if args.input:
+                return 2
+            input_path = _prompt_input_path(prompt)
+
+    # 2. Output File (Mapping YAML) & Resume Logic
+    output_path = args.output
+    while output_path is None:
+        with path_completion():
+            val = prompt("Output mapping YAML path [mapping.yaml]: ").strip()
+        output_path = _path(val or "mapping.yaml")
+
+    resume_config: MappingConfig | None = None
+    if output_path.exists():
+        try:
+            print(f"Found existing mapping file: {output_path}")
+            from .mapping.config import load_mapping_config
+            
+            existing_config = load_mapping_config(output_path)
+            if prompt_bool(prompt, "Resume existing mapping? [Y/n] ", default=True):
+                 resume_config = existing_config
+                 print(f"Resuming mapping for {resume_config.dataset_type} ({resume_config.spec_version})...")
+            else:
+                 print("Starting fresh (existing file will be overwritten on save).")
+        except Exception as e:
+            _eprint(f"Warning: Existing mapping file is invalid: {e}")
+            if not prompt_bool(prompt, "Overwrite and start fresh? [y/N] ", default=False):
+                print("Exiting.")
+                return 0
+
+    # 3. Spec & Dataset Details (if not resuming)
+    spec: FocusSpec | None = None
+    if resume_config:
+        try:
+            # Load the spec version used in the resume config
+            # We need to respect spec_dir here as well if user provided it
+            spec = load_focus_spec(
+                resume_config.spec_version[1:] if resume_config.spec_version.startswith("v") else resume_config.spec_version,
+                spec_dir=args.spec_dir
+            )
+        except Exception as e:
+            _eprint(f"Error loading spec for resumed configuration: {e}")
+            return 2
+    else:
+        # Prompt for spec version
         while True:
-            available = list_available_spec_versions()
+            available = list_available_spec_versions(spec_dir=args.spec_dir)
             default_spec = "v1.3"
             if available and default_spec not in available:
                 default_spec = available[-1]
+            
             spec_version = args.spec
             if not spec_version:
                  if available:
@@ -137,64 +204,52 @@ def main(argv: list[str] | None = None) -> int:
                      )
             try:
                 logger.debug("Loading FOCUS spec version: %s", spec_version)
-                spec = load_focus_spec(spec_version)
+                spec = load_focus_spec(spec_version, spec_dir=args.spec_dir)
                 break
             except Exception as e:
                 _eprint(f"Error: {e}")
                 if args.spec:
                     return 2
+                # Retry loop if interactive
+                spec_version = None
 
-        input_path = args.input or _prompt_input_path(prompt)
+    # Load sample for preview
+    sample_df = None
+    try:
+        sample_df = read_table(input_path, nrows=100)
+    except Exception:
+        # Ignore errors in sample loading; preview will just be disabled
+        pass
 
-        # Read and validate input file
-        df = None
-        while df is None:
-            if not input_path.exists():
-                _eprint(f"Error: input file not found: {input_path}")
-                if args.input:
-                    return 2
-                input_path = _prompt_input_path(prompt)
-                continue
+    # 4. Optional Columns (Prompt regardless of resume, or maybe skip if strictly resuming?)
+    # Plan says: "but still prompt user to specify whether to include recommended/conditional/optional columns"
+    include_recommended = args.include_recommended
+    if not include_recommended:
+        answer = prompt("Include Recommended columns? [y/N] ").strip().lower()
+        include_recommended = answer in {"y", "yes"}
 
-            try:
-                logger.debug("Reading input dataset: %s", input_path)
-                df = read_table(input_path)
-            except Exception as e:
-                _eprint(f"Error: failed to read input file: {e}")
-                if args.input:
-                    return 2
-                input_path = _prompt_input_path(prompt)
+    include_conditional = args.include_conditional
+    if not include_conditional:
+        answer = prompt("Include Conditional columns? [y/N] ").strip().lower()
+        include_conditional = answer in {"y", "yes"}
 
-        # Load sample for preview
-        sample_df = None
+    include_optional = args.include_optional
+    if not include_optional:
+        answer = prompt("Include Optional columns? [y/N] ").strip().lower()
+        include_optional = answer in {"y", "yes"}
+
+    logger.debug("Starting interactive wizard...")
+    
+    # We define a saver function to pass to the wizard for incremental saving
+    def save_callback(cfg: MappingConfig) -> None:
         try:
-            sample_df = read_table(input_path, nrows=100)
-        except Exception:
-            # Ignore errors in sample loading; preview will just be disabled
-            pass
+             output_path.parent.mkdir(parents=True, exist_ok=True)
+             _write_mapping(output_path, cfg)
+             print(f"  (Saved to {output_path})")
+        except Exception as e:
+             _eprint(f"  (Warning: Failed to auto-save: {e})")
 
-        output_path = args.output
-        while output_path is None:
-            with path_completion():
-                val = prompt("Output mapping YAML path [mapping.yaml]: ").strip()
-            output_path = _path(val or "mapping.yaml")
-
-        include_recommended = args.include_recommended
-        if not include_recommended:
-            answer = prompt("Include Recommended columns? [y/N] ").strip().lower()
-            include_recommended = answer in {"y", "yes"}
-
-        include_conditional = args.include_conditional
-        if not include_conditional:
-            answer = prompt("Include Conditional columns? [y/N] ").strip().lower()
-            include_conditional = answer in {"y", "yes"}
-
-        include_optional = args.include_optional
-        if not include_optional:
-            answer = prompt("Include Optional columns? [y/N] ").strip().lower()
-            include_optional = answer in {"y", "yes"}
-
-        logger.debug("Starting interactive wizard...")
+    try:
         result = run_wizard(
             spec=spec,
             input_df=df,
@@ -203,20 +258,21 @@ def main(argv: list[str] | None = None) -> int:
             include_recommended=include_recommended,
             include_conditional=include_conditional,
             sample_df=sample_df,
+            resume_config=resume_config,
+            save_callback=save_callback,
         )
 
-        try:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            logger.info("Writing mapping configuration to: %s", output_path)
-            _write_mapping(output_path, result.mapping)
-            print(f"Wrote mapping to {output_path}")
-            return 0
-        except Exception as e:
-            logger.exception(f"Failed to write mapping file: {e}")
-            return 2
+        # Final save (redundant if incremental works, but safe)
+        save_callback(result.mapping)
+        print(f"Wizard completed. Mapping saved to {output_path}")
+        return 0
+        
     except KeyboardInterrupt:
         print("\n\nWizard interrupted by user. Exiting...")
         return 130  # Standard exit code for Ctrl+C
+    except Exception as e:
+        logger.exception("Wizard failed")
+        return 1
 
 
 if __name__ == "__main__":
