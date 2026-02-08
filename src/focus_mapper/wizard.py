@@ -261,7 +261,7 @@ def _prompt_for_steps(
                 ("done", "done"),
             ])
             
-            choice = prompt_menu(prompt, "Add step:", add_options, default="done")
+            choice = prompt_menu(prompt, "Add additional step (if needed): ", add_options, default="done")
             if choice == "done":
                 return steps
 
