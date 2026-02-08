@@ -179,9 +179,9 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
     if version >= "1.3" and mapping.dataset_type == "CostAndUsage":
         # Resolve completeness from args or prompt
-        if args.dataset_complete:
+        if getattr(args, "dataset_complete", None):
             dataset_instance_complete = True
-        elif args.dataset_incomplete:
+        elif getattr(args, "dataset_incomplete", None):
             dataset_instance_complete = False
         else:
             # First prompt: Is the dataset instance complete?
@@ -201,7 +201,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
                     start = str(row["ChargePeriodStart"])
                     end = str(row["ChargePeriodEnd"])
                     
-                    if args.dataset_incomplete:
+                    if getattr(args, "dataset_incomplete", None):
                         # If forcing incomplete via CLI, assume sectors are incomplete unless we build a complex arg parser.
                         # For now, this lets users bypass the prompts.
                         ans = False
@@ -218,8 +218,8 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     sidecar = build_sidecar_metadata(
         spec=spec,
         mapping=mapping,
-        generator_name=args.data_generator or os.environ.get("FOCUS_DATA_GENERATOR_NAME", "focus-mapper"),
-        generator_version=args.data_generator_version or os.environ.get("FOCUS_DATA_GENERATOR_VERSION", __version__),
+        generator_name=getattr(args, "data_generator", None) or os.environ.get("FOCUS_DATA_GENERATOR_NAME", "focus-mapper"),
+        generator_version=getattr(args, "data_generator_version", None) or os.environ.get("FOCUS_DATA_GENERATOR_VERSION", __version__),
         input_path=input_path,
         output_path=output_path,
         output_df=out_df,
