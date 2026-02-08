@@ -48,7 +48,7 @@ def write_table(
             import pyarrow.parquet as pq
         except Exception as e:  # pragma: no cover
             raise ParquetUnavailableError(
-                "Parquet metadata embedding requires pyarrow. Install with: pip install -e '.[parquet]'"
+                "Parquet metadata embedding requires pyarrow. Install with: pip install -e \".[parquet]\""
             ) from e
 
         table = pa.Table.from_pandas(df, preserve_index=False)
