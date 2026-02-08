@@ -36,6 +36,9 @@ def test_resume_logic_skips_existing(mock_spec, sample_df):
         dataset_type="CostAndUsage",
         dataset_instance_name="Test"
     )
+    
+    # Configure prompt to return "n" (no) to boolean questions to avoid infinite loops
+    prompt.side_effect = lambda x: "n"
 
     # Mock _prompt_for_steps to return steps for BillingAccountName immediately
     # We patch _prompt_for_steps inside wizard module? Or unit test run_wizard

@@ -13,6 +13,7 @@ def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:
     # Minimal inputs: use const for all targets.
     inputs_list = [
         "",  # use default validation settings
+        "y", # enable per-column validation overrides (to keep existing loop logic valid)
     ]
     mandatory_cols = [c for c in spec.columns if c.feature_level.lower() == "mandatory"]
     for col in mandatory_cols:

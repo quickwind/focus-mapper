@@ -48,8 +48,9 @@ def test_wizard_records_skipped_columns(mock_spec, sample_df):
     inputs = [
         "TestDataset",  # 1. Dataset Instance Name
         "y",            # 2. Validation defaults? Y
-        "X",            # 3. MandatoryCol const value (prompted inside const block)
-        "n",            # 4. MandatoryCol validation override? n
+        "n",            # 3. Global Validation Overrides? n (NEW)
+        "X",            # 4. MandatoryCol const value (prompted inside const block)
+        # "n",          # 5. MandatoryCol validation override? (SKIPPED due to global=n)
         "n"             # 5. Add extension? n
     ]
     
@@ -91,15 +92,16 @@ def test_wizard_extension_enhancements(mock_spec, sample_df):
     inputs = [
         "TestDS",       # 1. Dataset
         "y",            # 2. Defaults
-        "A",            # 3. Man Val
-        "n",            # 4. Man Valid
+        "n",            # 3. Global Validation Overrides? n (NEW)
+        "A",            # 4. Man Val
+        # "n",          # (Skipped Man Valid)
         "y",            # 5. Add extension?
         "test",         # 6. Suffix
         "desc",         # 7. Desc
-        # "string",     # 8. Type (REMOVED: now handled by prompt_menu mock)
-        "B",            # 9. Ext Val
-        "n",            # 10. Ext Valid
-        "n"             # 11. Add another extension?
+        # "string",     # (Skipped Type - mock)
+        "B",            # 8. Ext Val
+        # "n",          # (Skipped Ext Valid)
+        "n"             # 9. Add another extension?
     ]
     
     # Menu choices:
@@ -159,8 +161,9 @@ def test_resume_skips_columns(mock_spec, sample_df):
     )
 
     # Inputs:
-    # 1. Add extension? n
-    inputs = ["n"]
+    # 1. Validation overrides? n (NEW)
+    # 2. Add extension? n
+    inputs = ["n", "n"]
     
     with patch("focus_mapper.wizard.prompt_menu") as mock_menu:
         # Should not be called
@@ -200,9 +203,10 @@ def test_extension_autosave(mock_spec, sample_df):
     # 11. Add ext? n
     inputs = [
         "TestDS", "y", 
+        "y", # Global valid? y
         "A", "n", 
         "y", "ext1", "desc1", 
-        # "string",  <-- REMOVED: now handled by prompt_menu mock
+        # "string",  <-- handled by prompt_menu mock
         "B", "n", 
         "n"
     ]

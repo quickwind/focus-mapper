@@ -81,6 +81,15 @@ def run_wizard(
         existing_targets = set()
         skipped_targets = set()
 
+    # Ask validation overrides for BOTH new and resume flows
+    ask_validation_overrides = prompt_bool(
+        prompt, 
+        "Do you want to ever override validation for specific columns? [y/N] ", 
+        default=False
+    )
+    if ask_validation_overrides is None:
+         ask_validation_overrides = False
+
     # Define helper to build current config for saving
     def build_current_config() -> MappingConfig:
         return MappingConfig(
@@ -120,11 +129,15 @@ def run_wizard(
                 data_type=target.data_type,
                 numeric_scale=target.numeric_scale,
             )
-            validation = _prompt_column_validation(
-                target_name=target.name,
-                data_type=target.data_type,
-                prompt=prompt,
-            )
+            
+            validation = None
+            if ask_validation_overrides:
+                 validation = _prompt_column_validation(
+                    target_name=target.name,
+                    data_type=target.data_type,
+                    prompt=prompt,
+                )
+
             rules.append(
                 MappingRule(
                     target=target.name,
@@ -167,12 +180,12 @@ def run_wizard(
         if save_callback:
              save_callback(build_current_config())
 
-    # We only prompt for extensions if we are at the end of the standard flow
     _ = _prompt_extension_columns(
         columns=columns, 
         prompt=prompt, 
         existing_targets=current_ext_targets,
-        on_rule_added=on_ext_rule
+        on_rule_added=on_ext_rule,
+        ask_validation_overrides=ask_validation_overrides
     )
     # We ignore the returned rules list because on_ext_rule handles appending and saving.
 
@@ -510,7 +523,8 @@ def _prompt_extension_columns(
     columns: list[str], 
     prompt: PromptFunc, 
     existing_targets: set[str] | None = None,
-    on_rule_added: Callable[[MappingRule], None] | None = None
+    on_rule_added: Callable[[MappingRule], None] | None = None,
+    ask_validation_overrides: bool = True,
 ) -> list[MappingRule]:
     # If existing_targets provided, we assume we might be resuming.
     # Spec says: "ask for extensions".
@@ -579,11 +593,15 @@ def _prompt_extension_columns(
                 data_type=data_type,
                 numeric_scale=None, # Prompt for scale? defaulting to None for now
             )
-            validation = _prompt_column_validation(
-                target_name=name,
-                data_type=data_type,
-                prompt=prompt,
-            )
+            
+            validation = None
+            if ask_validation_overrides:
+                validation = _prompt_column_validation(
+                    target_name=name,
+                    data_type=data_type,
+                    prompt=prompt,
+                )
+
             rule = MappingRule(
                 target=name,
                 steps=steps,

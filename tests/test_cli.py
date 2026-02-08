@@ -169,6 +169,7 @@ def test_wizard_cli_prompts_for_missing_args(tmp_path: Path, monkeypatch) -> Non
         "n",
         "n",
         "",  # use default validation settings
+        "y", # enable global validation overrides
     ]
 
     mandatory_cols = [c for c in spec.columns if c.feature_level.lower() == "mandatory"]
