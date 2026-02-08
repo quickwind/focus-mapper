@@ -531,8 +531,8 @@ def _prompt_extension_columns(
     
     rules: list[MappingRule] = []
     while True:
-        add = prompt("Add x_ extension column? [y/N] ").strip().lower()
-        if add not in {"y", "yes"}:
+        add = prompt_bool(prompt, "Add x_ extension column? [Y/n] ", default=True)
+        if not add:
             return rules
 
         suffix = prompt("Extension column suffix (appended to x_): ").strip()
