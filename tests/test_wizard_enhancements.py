@@ -180,3 +180,61 @@ def test_resume_skips_columns(mock_spec, sample_df):
     assert result.mapping.rules[0].target == "MandatoryCol"
     # Skipped columns should be preserved
     assert "OptionalCol" in result.mapping.skipped_columns
+
+
+def test_extension_autosave(mock_spec, sample_df):
+    """Test that extension columns trigger save_callback immediately."""
+    
+    # Inputs:
+    # 1. Dataset
+    # 2. Defaults
+    # 3. Mand -> const
+    # 4. Mand Valid
+    # 5. Add ext? y
+    # 6. suffix
+    # 7. desc
+    # 8. type
+    # 9. const
+    # 10. valid
+    # 11. Add ext? n
+    inputs = [
+        "TestDS", "y", 
+        "A", "n", 
+        "y", "ext1", "desc1", "string", "B", "n", 
+        "n"
+    ]
+    
+    menu_choices = ["const", "done", "skip", "const", "done"]
+    menu_iter = iter(menu_choices)
+    def menu_side_effect(prompt, header, options, default=None):
+        try:
+            return next(menu_iter)
+        except StopIteration:
+            return default
+
+    save_callback = MagicMock()
+    
+    with patch("focus_mapper.wizard.prompt_menu", side_effect=menu_side_effect):
+        run_wizard(
+            spec=mock_spec,
+            input_df=sample_df,
+            prompt=create_mock_prompt(inputs),
+            include_optional=True,
+            include_recommended=True,
+            include_conditional=True,
+            save_callback=save_callback
+        )
+    
+    # Check save calls
+    # Call 1: OptionalCol skipped
+    # Call 2: MandatoryCol mapped
+    # Call 3: Extension x_ext1 mapped
+    assert save_callback.call_count >= 3
+    
+    # Get the last call arg
+    last_config = save_callback.call_args[0][0]
+    assert isinstance(last_config, MappingConfig)
+    
+    # Verify x_ext1 is in the rules of the saved config
+    targets = [r.target for r in last_config.rules]
+    assert "x_ext1" in targets

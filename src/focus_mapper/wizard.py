@@ -154,16 +154,27 @@ def run_wizard(
     # The current `ext_rules` logic loops until user says no.
     current_ext_targets = {r.target for r in rules if r.target.startswith("x_")}
     
-    # We only prompt for extensions if we are at the end of the standard flow
-    ext_rules = _prompt_extension_columns(
-        columns=columns, 
-        prompt=prompt, 
-        existing_targets=current_ext_targets
-    )
-    for rule in ext_rules:
+    def on_ext_rule(rule: MappingRule):
+        # We append to the main rules list so it's included in the config
+        # Note: _prompt_extension_columns also maintains a local list but we ignore its return value
+        # to avoid duplication or need for merging.
+        # Actually, to be safe against double-adding if we used the return value,
+        # we should just trust the callback.
+        
+        # But wait, `rules` is a local variable in run_wizard. 
+        # Python closures format: `rules` is captured.
         rules.append(rule)
         if save_callback:
              save_callback(build_current_config())
+
+    # We only prompt for extensions if we are at the end of the standard flow
+    _ = _prompt_extension_columns(
+        columns=columns, 
+        prompt=prompt, 
+        existing_targets=current_ext_targets,
+        on_rule_added=on_ext_rule
+    )
+    # We ignore the returned rules list because on_ext_rule handles appending and saving.
 
     return WizardResult(
         mapping=build_current_config(),
@@ -495,7 +506,11 @@ def _prompt_for_steps(
 
 
 def _prompt_extension_columns(
-    *, columns: list[str], prompt: PromptFunc, existing_targets: set[str] | None = None
+    *, 
+    columns: list[str], 
+    prompt: PromptFunc, 
+    existing_targets: set[str] | None = None,
+    on_rule_added: Callable[[MappingRule], None] | None = None
 ) -> list[MappingRule]:
     # If existing_targets provided, we assume we might be resuming.
     # Spec says: "ask for extensions".
@@ -564,14 +579,15 @@ def _prompt_extension_columns(
                 data_type=data_type,
                 prompt=prompt,
             )
-            rules.append(
-                MappingRule(
-                    target=name,
-                    steps=steps,
-                    description=desc,
-                    validation=validation,
-                )
+            rule = MappingRule(
+                target=name,
+                steps=steps,
+                description=desc,
+                validation=validation,
             )
+            rules.append(rule)
+            if on_rule_added:
+                on_rule_added(rule)
         else:
             print("No steps configured. Skipping extension column.\n")
 
