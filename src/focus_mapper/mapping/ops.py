@@ -407,6 +407,36 @@ def apply_steps(
             series = _eval_pandas_expr(expr, df=df, current=series, target=target)
             continue
 
+        if op == "sql":
+            # DuckDB SQL expression (recommended over pandas_expr)
+            import duckdb
+
+            expr = step.get("expr")
+            query = step.get("query")
+            if not expr and not query:
+                raise MappingExecutionError(
+                    f"sql requires 'expr' or 'query' for target {target}"
+                )
+            try:
+                conn = duckdb.connect(":memory:")
+                conn.register("src", df)
+                if expr:
+                    result = conn.execute(f"SELECT {expr} AS result FROM src").df()["result"]
+                else:
+                    # Basic safety check
+                    query_upper = query.strip().upper()
+                    if not (query_upper.startswith("SELECT") or query_upper.startswith("WITH")):
+                         raise MappingExecutionError(
+                            f"sql query for target {target} must start with SELECT or WITH"
+                        )
+                    result = conn.execute(query).df().iloc[:, 0]
+                series = result
+            except Exception as e:
+                raise MappingExecutionError(
+                    f"sql failed for target {target}: {e}"
+                ) from e
+            continue
+
         raise MappingExecutionError(f"Unknown op '{op}' for target {target}")
 
     if series is None:

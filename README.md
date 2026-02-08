@@ -345,8 +345,10 @@ validation:
 mappings:
   BillingPeriodStart:
     steps:
-      - op: pandas_expr
-        expr: 'pd.to_datetime(df["billing_period"] + "-01", utc=True)'
+      - op: sql
+        expr: "TRY_CAST(billing_period || '-01' AS TIMESTAMPTZ)"
+      - op: cast
+        to: datetime
     validation:
       mode: strict
       datetime:
@@ -419,15 +421,15 @@ mappings:
 
   ChargePeriodStart:
     steps:
-      - op: pandas_expr
-        expr: 'pd.to_datetime(df["billing_date"] + "T" + df["billing_hour"].astype(int).astype(str).str.replace(r"^(\\d)$", r"0\\1", regex=True) + ":00:00Z", utc=True)'
+      - op: sql
+        expr: "TRY_CAST(billing_date || 'T' || LPAD(CAST(billing_hour AS VARCHAR), 2, '0') || ':00:00Z' AS TIMESTAMPTZ)"
       - op: cast
         to: datetime
 
   ChargePeriodEnd:
     steps:
-      - op: pandas_expr
-        expr: 'pd.to_datetime(df["billing_date"] + "T" + df["billing_hour"].astype(int).astype(str).str.replace(r"^(\\d)$", r"0\\1", regex=True) + ":00:00Z", utc=True) + pd.to_timedelta(1, unit="h")'
+      - op: sql
+        expr: "TRY_CAST(billing_date || 'T' || LPAD(CAST(billing_hour AS VARCHAR), 2, '0') || ':00:00Z' AS TIMESTAMPTZ) + INTERVAL 1 HOUR"
       - op: cast
         to: datetime
 
@@ -461,7 +463,49 @@ mappings:
 | `round` | Round the current numeric series to `ndigits`. | `ndigits` (int, default 0) | `- op: round`<br>`  ndigits: 2` |
 | `math` | Row-wise arithmetic across columns or constants. Supports `add`, `sub`, `mul`, `div`. Use `operands` to list inputs. | `operator` (string), `operands` (list of `{column}` or `{const}`) | `- op: math`<br>`  operator: add`<br>`  operands: [{column: "cost"}, {column: "tax"}]` |
 | `when` | Conditional assignment: if `column == value` then `then`, else `else`. | `column`, `value`, `then`, `else` (optional) | `- op: when`<br>`  column: "charge_category"`<br>`  value: "Tax"`<br>`  then: "Y"`<br>`  else: "N"` |
+| `sql` | **Recommended.** Execute a DuckDB SQL expression. Cleaner syntax and better performance than `pandas_expr`. Use column names directly. | `expr` (string) or `query` (full SQL) | `- op: sql`<br>`  expr: "a + b"` |
 | `pandas_expr` | Evaluate a safe pandas expression. Use `df` for the input DataFrame, `current` for the prior series, and `pd` for pandas helpers. Must return a Series or scalar. | `expr` (string) | `- op: pandas_expr`<br>`  expr: "df['a'] + df['b']"` |
+
+### sql Operation (Recommended)
+
+The `sql` operation uses DuckDB SQL and is recommended over `pandas_expr` for:
+- Cleaner, more readable syntax
+- Better performance on large datasets
+- Familiar SQL semantics
+
+```yaml
+# Arithmetic
+EffectiveCost:
+  steps:
+    - op: sql
+      expr: "billed_cost + tax_amount"
+
+# Date/time with INTERVAL
+ChargePeriodEnd:
+  steps:
+    - op: sql
+      expr: "TRY_CAST(billing_date || 'T00:00:00Z' AS TIMESTAMPTZ) + INTERVAL 1 HOUR"
+
+# Conditional (CASE)
+x_IsTax:
+  steps:
+    - op: sql
+      expr: "CASE WHEN charge_category = 'Tax' THEN 'Y' ELSE 'N' END"
+
+# Full Query Mode
+# Use 'query' for complex SQL involving aggregations or window functions.
+# You must SELECT from the 'src' table and return a single column.
+x_RunningTotal:
+  steps:
+    - op: sql
+      query: "SELECT SUM(billed_cost) OVER (PARTITION BY billing_account_id ORDER BY billing_date) FROM src"
+```
+
+**Safety Note:** `sql` queries must start with `SELECT` or `WITH` to ensure read-only operations.
+
+**Warning:** Using `ORDER BY` in your query (or within window functions) may change the row order of the result relative to the input DataFrame. Ensure your validation and logic accounts for potential row reordering if you rely on index alignment.
+
+See [DuckDB SQL docs](https://duckdb.org/docs/sql/introduction) for available functions.
 
 ### pandas_expr Safety Notes
 

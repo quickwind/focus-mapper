@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "focus-mapper"
-version = "0.2.0"
-description = "FOCUS report mapping tool"
+version = "0.3.0"
+description = "Generate FinOps FOCUS™ compliant reports from any billing data using simple YAML mapping configuration."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
@@ -33,6 +33,7 @@ dependencies = [
   "PyYAML>=5.4",
   "pyreadline3>=3.5; platform_system == 'Windows'",
   "iso4217parse>=0.6",
+  "duckdb>=1.0",
 ]
 
 [project.optional-dependencies]

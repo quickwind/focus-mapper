@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-02-08
+
+### New Feature: SQL Operation (DuckDB Support)
+
+We are excited to introduce the `sql` operation, powered by DuckDB. This is now the **recommended** method for complex transformations, offering better performance and standard SQL syntax compared to `pandas_expr`.
+
+#### Key Capabilities
+- **Expression Mode (`expr`)**: Simple column arithmetic or SQL functions.
+  ```yaml
+  - op: sql
+    expr: "billed_cost + tax_amount"
+  ```
+- **Query Mode (`query`)**: Full SQL power, including window functions and aggregations.
+  ```yaml
+  - op: sql
+    query: "SELECT SUM(billed_cost) OVER (PARTITION BY billing_account_id ORDER BY billing_date) FROM src"
+  ```
+  *(Note: Queries must select from the `src` table and return a single column.)*
+
+### Improvements
+
+#### CLI & API
+- **Strict Prompt Validation**: Interactive prompts now rigidly require "y/n" or "yes/no" inputs.
+- **Automation Flags**: New CLI flags `--dataset-complete` and `--dataset-incomplete` allow skipping interactive prompts for CostAndUsage datasets.
+- **API Enhancement**: The `generate()` function now accepts a `sector_complete_map` parameter for granular programmatic control over TimeSector completeness.
+
+#### Documentation & Templates
+- **Updated Wizard**: The mapping wizard now includes the `sql` operation as a standard option.
+- **Enhanced Examples**: `README.md` and test fixtures now demonstrate best practices for using SQL in your mappings.
+
 ## [0.2.0] - 2026-02-07
 
 ### 🎉 Library API & v1.3 Support

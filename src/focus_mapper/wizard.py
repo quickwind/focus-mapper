@@ -179,6 +179,7 @@ def _prompt_for_steps(
                 ("map_values", "map_values"),
                 ("concat", "concat"),
                 ("math", "math"),
+                ("sql", "sql"),
                 ("pandas_expr", "pandas_expr"),
             ])
             if allow_skip:
@@ -196,6 +197,7 @@ def _prompt_for_steps(
                 ("round", "round"),
                 ("math", "math"),
                 ("when", "when"),
+                ("sql", "sql"),
                 ("pandas_expr", "pandas_expr"),
                 ("done", "done"),
             ])
@@ -311,6 +313,20 @@ def _prompt_for_steps(
                 ).strip()
                 steps.append({"op": "pandas_expr", "expr": expr})
                 has_series = True
+            elif choice == "sql":
+                mode = prompt_menu(prompt, "SQL mode:", [("expr", "Expression (simple)"), ("query", "Query (full SQL)")])
+                if mode == "expr":
+                    print("Enter a DuckDB SQL expression using column names directly.")
+                    print("Examples: 'a + b', 'CASE WHEN x = 1 THEN y ELSE z END', 'UPPER(name)'")
+                    expr = prompt("SQL expression: ").strip()
+                    steps.append({"op": "sql", "expr": expr})
+                else:
+                    print("Enter a full DuckDB SQL query. Use table name 'src'. Must return one column.")
+                    print("Example: 'SELECT a + b FROM src'")
+                    query = prompt("SQL query: ").strip()
+                    steps.append({"op": "sql", "query": query})
+                has_series = True
+
         else:
             if choice == "map_values":
                 mapping: dict[str, str] = {}
@@ -381,6 +397,19 @@ def _prompt_for_steps(
                     "Enter pandas expression (use df, pd, and/or current): "
                 ).strip()
                 steps.append({"op": "pandas_expr", "expr": expr})
+            elif choice == "sql":
+                mode = prompt_menu(prompt, "SQL mode:", [("expr", "Expression (simple)"), ("query", "Query (full SQL)")])
+                if mode == "expr":
+                    print("Enter a DuckDB SQL expression using column names directly.")
+                    print("Examples: 'a + b', 'CASE WHEN x = 1 THEN y ELSE z END', 'UPPER(name)'")
+                    expr = prompt("SQL expression: ").strip()
+                    steps.append({"op": "sql", "expr": expr})
+                else:
+                    print("Enter a full DuckDB SQL query. Use table name 'src'. Must return one column.")
+                    print("Example: 'SELECT a + b FROM src'")
+                    query = prompt("SQL query: ").strip()
+                    steps.append({"op": "sql", "query": query})
+
 
 
 def _prompt_extension_columns(

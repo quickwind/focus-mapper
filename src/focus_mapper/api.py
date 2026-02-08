@@ -80,6 +80,7 @@ def generate(
     generator_version: str | None = None,
     time_sectors: list[dict] | None = None,
     dataset_instance_complete: bool | None = None,
+    sector_complete_map: dict[tuple[str, str], bool] | None = None,
     provider_tag_prefixes: list[str] | None = None,
 ) -> GenerationResult:
     """
@@ -103,6 +104,7 @@ def generate(
         time_sectors: Pre-computed time sectors for v1.3+ CostAndUsage.
                       If None and data has ChargePeriod columns, auto-extracted.
         dataset_instance_complete: For v1.3+ metadata. Defaults to True if not provided.
+        sector_complete_map: Optional map of (start, end) -> complete bool, only used if time_sectors is None.
         provider_tag_prefixes: Tag prefixes for provider columns.
 
     Returns:
@@ -162,7 +164,11 @@ def generate(
     if ver >= "1.3" and mapping.dataset_type == "CostAndUsage":
         if time_sectors is None:
             complete = dataset_instance_complete if dataset_instance_complete is not None else True
-            time_sectors = extract_time_sectors(output_df, dataset_complete=complete)
+            time_sectors = extract_time_sectors(
+                output_df, 
+                dataset_complete=complete,
+                sector_complete_map=sector_complete_map
+            )
         if dataset_instance_complete is None:
             dataset_instance_complete = True
 
@@ -348,6 +354,7 @@ def validate_mapping(
             "math",
             "when",
             "pandas_expr",
+            "sql",
         }
         for rule in parsed_mapping.rules:
             for i, step in enumerate(rule.steps):

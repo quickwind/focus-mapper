@@ -78,15 +78,15 @@ mappings:
 
   ChargePeriodStart:
     steps:
-      - op: pandas_expr
-        expr: 'pd.to_datetime(df["billing_date"] + "T" + df["billing_hour"].astype(int).astype(str).str.replace(r"^(\\d)$", r"0\\1", regex=True) + ":00:00Z", utc=True)'
+      - op: sql
+        expr: "TRY_CAST(billing_date || 'T' || LPAD(CAST(billing_hour AS VARCHAR), 2, '0') || ':00:00Z' AS TIMESTAMPTZ)"
       - op: cast
         to: datetime
 
   ChargePeriodEnd:
     steps:
-      - op: pandas_expr
-        expr: 'pd.to_datetime(df["billing_date"] + "T" + df["billing_hour"].astype(int).astype(str).str.replace(r"^(\\d)$", r"0\\1", regex=True) + ":00:00Z", utc=True) + pd.to_timedelta(1, unit="h")'
+      - op: sql
+        expr: "TRY_CAST(billing_date || 'T' || LPAD(CAST(billing_hour AS VARCHAR), 2, '0') || ':00:00Z' AS TIMESTAMPTZ) + INTERVAL 1 HOUR"
       - op: cast
         to: datetime
 
@@ -152,8 +152,8 @@ mappings:
 
   EffectiveCost:
     steps:
-      - op: pandas_expr
-        expr: "df['billed_cost'] + df['tax_amount']"
+      - op: sql
+        expr: "billed_cost + tax_amount"
       - op: cast
         to: decimal
         scale: 2
@@ -213,7 +213,7 @@ mappings:
       - op: from_column
         column: tax_amount
       - op: round
-        ndigits: 0
+        ndigits: 1
 
   # Use 'math' op
   x_MathTotal:
@@ -234,3 +234,22 @@ mappings:
         value: "Tax"
         then: "Y"
         else: "N"
+
+  # Use 'sql' query mode
+  x_QueryTotal:
+    description: "Total cost using sql query"
+    steps:
+      - op: sql
+        query: "SELECT billed_cost + tax_amount FROM src"
+
+  # Enriched data mappings
+  ResourceId:
+    steps:
+      - op: from_column
+        column: billing_resource_id
+
+  x_DailyTotalCost:
+    description: "Daily total cost per resource using window function"
+    steps:
+      - op: sql
+        query: "SELECT SUM(billed_cost) OVER (PARTITION BY billing_resource_id, billing_date ORDER BY billing_date) FROM src ORDER BY billing_resource_id, billing_date"

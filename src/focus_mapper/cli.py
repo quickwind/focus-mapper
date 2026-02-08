@@ -33,6 +33,22 @@ def _prompt(text: str) -> str:
     return input(text)
 
 
+def _prompt_bool(text: str, default: bool = True) -> bool:
+    """Prompt for a yes/no answer with strict validation."""
+    valid_true = {"y", "yes"}
+    valid_false = {"n", "no"}
+
+    while True:
+        val = _prompt(text).strip().lower()
+        if not val:
+            return default
+        if val in valid_true:
+            return True
+        if val in valid_false:
+            return False
+        _eprint("Please enter 'y' or 'n'.")
+
+
 def _setup_logging(level_name: str) -> None:
     level = getattr(logging, level_name.upper(), logging.INFO)
     logging.basicConfig(
@@ -80,6 +96,21 @@ def _build_parser() -> argparse.ArgumentParser:
         type=_path,
         help="Directory containing spec JSON files (overrides bundled specs). "
              "Also reads from FOCUS_SPEC_DIR env var if not set.",
+    )
+
+    # Dataset completion flags
+    comp_group = gen.add_mutually_exclusive_group()
+    comp_group.add_argument(
+        "--dataset-complete",
+        action="store_true",
+        default=None,
+        help="Mark dataset instance as complete (skip prompt)",
+    )
+    comp_group.add_argument(
+        "--dataset-incomplete",
+        action="store_true",
+        default=None,
+        help="Mark dataset instance as incomplete (skip prompt)",
     )
 
     val = sub.add_parser("validate", help="Validate an existing FOCUS dataset")
@@ -147,9 +178,14 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     version = spec.version.lstrip("v")
 
     if version >= "1.3" and mapping.dataset_type == "CostAndUsage":
-        # First prompt: Is the dataset instance complete?
-        answer = _prompt("Is the dataset instance complete? [Y/n]: ").strip().lower()
-        dataset_instance_complete = answer not in {"n", "no"}
+        # Resolve completeness from args or prompt
+        if args.dataset_complete:
+            dataset_instance_complete = True
+        elif args.dataset_incomplete:
+            dataset_instance_complete = False
+        else:
+            # First prompt: Is the dataset instance complete?
+            dataset_instance_complete = _prompt_bool("Is the dataset instance complete? [Y/n]: ", default=True)
 
         # Extract distinct time sectors
         if dataset_instance_complete:
@@ -164,8 +200,15 @@ def _cmd_generate(args: argparse.Namespace) -> int:
                 for _, row in pairs.iterrows():
                     start = str(row["ChargePeriodStart"])
                     end = str(row["ChargePeriodEnd"])
-                    ans = _prompt(f"Is time sector {start} to {end} complete? [Y/n]: ").strip().lower()
-                    sector_map[(start, end)] = ans not in {"n", "no"}
+                    
+                    if args.dataset_incomplete:
+                        # If forcing incomplete via CLI, assume sectors are incomplete unless we build a complex arg parser.
+                        # For now, this lets users bypass the prompts.
+                        ans = False
+                    else:
+                        ans = _prompt_bool(f"Is time sector {start} to {end} complete? [Y/n]: ", default=True)
+                    
+                    sector_map[(start, end)] = ans
                 time_sectors = extract_time_sectors(
                     out_df, dataset_complete=False, sector_complete_map=sector_map
                 )
