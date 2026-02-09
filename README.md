@@ -554,7 +554,7 @@ To build standalone Windows executables (`focus-mapper.exe` and `focus-mapper-wi
 
 1.  **Install PyInstaller:**
     ```bash
-    pip install ".[build]"
+    pip install -e ".[build]"
     ```
 
 2.  **Run the Build:**

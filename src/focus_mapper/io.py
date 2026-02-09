@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import csv
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 
@@ -35,7 +35,15 @@ def write_table(
 ) -> None:
     suffix = _suffix(path)
     if suffix == "csv":
-        df.to_csv(path, index=False, date_format="%Y-%m-%dT%H:%M:%SZ")
+        df.to_csv(
+            path,
+            index=False,
+            date_format="%Y-%m-%dT%H:%M:%SZ",
+            quoting=csv.QUOTE_NONNUMERIC,  # quote strings/objects, not numbers
+            quotechar='"',  # default
+            doublequote=True,  # escape quotes by doubling them
+            na_rep="",  # optional: how to write NaNs
+        )
         return
 
     if suffix != "parquet":

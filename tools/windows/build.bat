@@ -18,9 +18,9 @@ if not exist "%PROJECT_ROOT%\pyproject.toml" (
 python -m PyInstaller --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo PyInstaller not found. Installing...
-    pip install ".[build]"
+    pip install -e ".[build]"
     if %errorlevel% neq 0 (
-        echo Error: Failed to install dependencies.
+        echo Error: Failed to install dependencies. Please install it via command: pip install -e ".[build]"
         exit /b 1
     )
 )
