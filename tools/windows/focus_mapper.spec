@@ -14,7 +14,6 @@ block_cipher = None
 # But `datas` paths are relative to CWD.
 # Let's make paths absolute based on spec file location to be safe.
 
-spec_root = os.path.abspath(os.getcwd())
 # Check if we are in project root or tools/windows
 if os.path.basename(os.getcwd()) == "windows" and os.path.basename(os.path.dirname(os.getcwd())) == "tools":
    project_root = os.path.abspath(os.path.join(os.getcwd(), "../../"))
@@ -22,14 +21,17 @@ else:
    # Assume project root
    project_root = os.getcwd()
 
+# Directory containing shim scripts (tools/windows)
+shim_dir = os.path.join(project_root, 'tools', 'windows')
+
 # Data files to include (source, destination)
 # Source is relative to project root
 datas = [(os.path.join(project_root, 'src/focus_mapper/specs'), 'focus_mapper/specs')]
 
 # --- focus-mapper CLI ---
 a_cli = Analysis(
-    [os.path.join(project_root, 'src/focus_mapper/__main__.py')],
-    pathex=[project_root],
+    [os.path.join(shim_dir, 'cli_runner.py')],
+    pathex=[os.path.join(project_root, 'src')],
     binaries=[],
     datas=datas,
     hiddenimports=['pyreadline3', 'pandas', 'duckdb'],
@@ -68,8 +70,8 @@ exe_cli = EXE(
 
 # --- focus-mapper-wizard CLI ---
 a_wizard = Analysis(
-    [os.path.join(project_root, 'src/focus_mapper/wizard_cli.py')],
-    pathex=[project_root],
+    [os.path.join(shim_dir, 'wizard_runner.py')],
+    pathex=[os.path.join(project_root, 'src')],
     binaries=[],
     datas=datas,
     hiddenimports=['pyreadline3', 'pandas', 'duckdb'], # Added pyreadline3 just in case
