@@ -50,6 +50,9 @@ dev = [
   "pytest-html",
   "pyarrow>=14.0",
 ]
+build = [
+  "pyinstaller>=6.0; platform_system == 'Windows'",
+]
 
 [project.scripts]
 focus-mapper = "focus_mapper.cli:main"

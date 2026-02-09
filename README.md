@@ -547,3 +547,30 @@ pytest
 ```
 
 Coverage is enabled by default. HTML report is written to `htmlcov/index.html`.
+
+## Building for Windows
+
+To build standalone Windows executables (`focus-mapper.exe` and `focus-mapper-wizard.exe`), use [PyInstaller](https://pyinstaller.org/).
+
+1.  **Install PyInstaller:**
+    ```bash
+    pip install ".[build]"
+    ```
+
+2.  **Run the Build:**
+    Use the provided build scripts in `tools/windows/`:
+    
+    **Command Prompt:**
+    ```cmd
+    tools\windows\build.bat
+    ```
+    
+    **PowerShell:**
+    ```powershell
+    .\tools\windows\build.ps1
+    ```
+
+3.  **Locate Executables:**
+    The generated `.exe` files will be in the `dist-win/` directory:
+    - `dist-win/focus-mapper.exe`
+    - `dist-win/focus-mapper-wizard.exe`
