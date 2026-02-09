@@ -101,6 +101,8 @@ def _write_mapping(path: Path, mapping: MappingConfig) -> None:
         body: dict[str, object] = {"steps": rule.steps}
         if rule.description:
             body["description"] = rule.description
+        if rule.data_type:
+            body["data_type"] = rule.data_type
         if rule.validation:
             body["validation"] = rule.validation
         mappings[rule.target] = body

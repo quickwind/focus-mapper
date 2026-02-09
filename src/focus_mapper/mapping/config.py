@@ -14,6 +14,7 @@ class MappingRule:
     target: str
     steps: list[dict[str, Any]]
     description: str | None = None
+    data_type: str | None = None
     validation: dict[str, Any] | None = None
 
 
@@ -95,6 +96,7 @@ def load_mapping_config(path: Path) -> MappingConfig:
                 target=target,
                 steps=steps,
                 description=body.get("description"),
+                data_type=body.get("data_type"),
                 validation=validation,
             )
         )

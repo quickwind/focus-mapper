@@ -149,6 +149,7 @@ def build_sidecar_metadata(
     column_definitions = _build_column_definitions(
         output_df=output_df,
         spec=spec,
+        mapping=mapping,
         provider_tag_prefixes=provider_tag_prefixes or [],
     )
 
@@ -255,6 +256,7 @@ def _build_column_definitions(
     *,
     output_df: pd.DataFrame,
     spec: FocusSpec,
+    mapping: MappingConfig,
     provider_tag_prefixes: list[str],
 ) -> list[dict]:
     out: list[dict] = []
@@ -272,7 +274,12 @@ def _build_column_definitions(
             if col == "Tags":
                 meta["ProviderTagPrefixes"] = list(provider_tag_prefixes)
         else:
-            meta["DataType"] = _infer_extension_type(output_df[col])
+            # Check if defined in mapping rules with explicit data type
+            rule = mapping.rule_for_target(col)
+            if rule and rule.data_type:
+                meta["DataType"] = _spec_type_to_metadata(rule.data_type)
+            else:
+                meta["DataType"] = _infer_extension_type(output_df[col])
         out.append(meta)
 
     return out
@@ -282,15 +289,15 @@ def _spec_type_to_metadata(data_type: str) -> str:
     t = data_type.strip().lower()
     if t == "string":
         return "STRING"
-    if t == "date/time":
+    if t in ("date/time", "datetime"):
         return "DATETIME"
     if t == "decimal":
         return "DECIMAL"
     if t == "json":
         return "JSON"
-    if t == "integer":
+    if t in ("integer", "int"):
         return "INTEGER"
-    if t == "boolean":
+    if t in ("boolean", "bool"):
         return "BOOLEAN"
     return "STRING"
 

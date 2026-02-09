@@ -239,19 +239,18 @@ def list_available_spec_versions(*, spec_dir: str | _Path | None = None) -> list
     search_paths = _resolve_spec_search_paths(spec_dir)
     # For listing, we use the first valid external directory found (if any),
     # matching the priority logic (Arg > Env). We don't merge them.
+    versions: set[str] = set()
+
+    # 1. Scan External Directories (Arg > Env)
+    # We use the first valid external directory found
     scan_dir: _Path | None = None
     for p in search_paths:
         if p.exists():
             scan_dir = p
             break
-    
-    versions: list[str] = []
-
-    # Scenario A: External Directory (Flat structure expected)
+            
     if scan_dir is not None:
         # Look for focus_spec_vX_Y.json or focus_spec_vX.Y.json
-        # Regex to extract version from filename
-        # Pattern: focus_spec_v(.+).json
         pat = re.compile(r"^focus_spec_v(.+)\.json$")
         
         for child in scan_dir.iterdir():
@@ -262,48 +261,19 @@ def list_available_spec_versions(*, spec_dir: str | _Path | None = None) -> list
                 raw_ver = m.group(1)
                 # Normalize version string (e.g., 1_0 -> v1.0)
                 dot_ver = raw_ver.replace("_", ".")
-                versions.append(f"v{dot_ver}")
-        return sorted(versions)
+                versions.add(f"v{dot_ver}")
 
-    # Scenario B: Bundled Specs (Nested structure: specs/v1.0/...)
+    # 2. Scan Bundled Specs
     specs_dir = _Path(__file__).resolve().parent / "specs"
-    if not specs_dir.exists():
-        return versions
-    
-    for child in specs_dir.iterdir():
-        if not child.is_dir():
-            continue
-        if not child.name.startswith("v"):
-            continue
-        mod = child.name[1:]
-        # Check for the filename format inside the dir
-        dot_version = mod.replace("_", ".")
-        # We expect a file inside: focus_spec_v{normalized}.json
-        # But wait, logic in load_focus_spec uses priority.
-        # Here we just list what validates as a spec dir.
-        
-        # Let's check existence of the JSON file to be sure
-        json_path = child / f"focus_spec_v{mod}.json" # load_focus_spec uses normalized (dots->_)
-        # But wait, list_available_spec_versions original code used:
-        # dot_version = mod.replace("_", ".")
-        # json_path = child / f"focus_spec_v{dot_version}.json" 
-        # (This looks inconsistent with load_focus_spec which does mod = normalized.replace(".", "_"))
-        
-        # Let's rely on looking for the file that load_focus_spec expects?
-        # load_focus_spec: filename = f"focus_spec_v{normalized}.json"
-        # where normalized = version.lower().removeprefix("v").
-        
-        # Original code:
-        # mod = child.name[1:] (e.g. "1.0" or "1_0"?)
-        # dot_version = mod.replace("_", ".")
-        # json_path = child / f"focus_spec_v{dot_version}.json"
-        
-        # Let's stick to the original logic for bundled specs to avoid breaking things, 
-        # but cleaned up.
-        
-        # Actually, let's just check if *any* spec file exists there?
-        # No, simpler: just list the versions found.
-        
-        versions.append("v" + dot_version)
+    if specs_dir.exists():
+        for child in specs_dir.iterdir():
+            if not child.is_dir():
+                continue
+            if not child.name.startswith("v"):
+                continue
+            mod = child.name[1:]
+            # Standardize on dot version
+            dot_version = mod.replace("_", ".")
+            versions.add(f"v{dot_version}")
             
-    return sorted(versions)
+    return sorted(list(versions))

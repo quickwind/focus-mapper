@@ -143,6 +143,7 @@ def run_wizard(
                     target=target.name,
                     steps=steps,
                     description=None,
+                    data_type=target.data_type,
                     validation=validation,
                 )
             )
@@ -649,6 +650,7 @@ def _prompt_extension_columns(
                 target=name,
                 steps=steps,
                 description=desc,
+                data_type=data_type,
                 validation=validation,
             )
             rules.append(rule)

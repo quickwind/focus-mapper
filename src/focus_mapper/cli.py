@@ -254,7 +254,8 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
-    available = list_available_spec_versions()
+    spec_dir = getattr(args, "spec_dir", None)
+    available = list_available_spec_versions(spec_dir=spec_dir)
     default_spec = "v1.3"
     if available and default_spec not in available:
         default_spec = available[-1]
@@ -273,7 +274,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
                 _prompt(f"FOCUS spec version [{default_spec}]: ").strip() or default_spec
             )
     logger.debug("Loading FOCUS spec version: %s", spec_version)
-    spec_dir = getattr(args, "spec_dir", None)
+    # spec_dir already extracted above
     spec = load_focus_spec(spec_version, spec_dir=spec_dir)
 
     input_path = getattr(args, "input", None)
