@@ -248,7 +248,6 @@ def main(argv: list[str] | None = None) -> int:
         try:
              output_path.parent.mkdir(parents=True, exist_ok=True)
              _write_mapping(output_path, cfg)
-             print(f"  (Saved to {output_path})")
         except Exception as e:
              _eprint(f"  (Warning: Failed to auto-save: {e})")
 

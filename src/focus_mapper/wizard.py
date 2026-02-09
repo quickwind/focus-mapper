@@ -227,6 +227,10 @@ def _prompt_for_steps(
     sample_df: pd.DataFrame | None = None,
 ) -> list[dict]:
     header = f"{'=' * 50}\nTarget column: \n\t{target.name} ({target.feature_level})"
+    if target.data_type:
+        header += f"\n\n\tData Type: {target.data_type}"
+    if target.value_format:
+        header += f" ({target.value_format})"
     if target.description:
         header += f"\n\n\tDescription: {target.description}"
     if suggested:
