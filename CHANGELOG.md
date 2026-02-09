@@ -5,12 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-02-09
+
+### Added
+- **Windows Build Support**: Added tooling to build standalone Windows executables (`focus-mapper.exe` and `focus-mapper-wizard.exe`) using PyInstaller.
+  - Included `tools/windows/build.bat` and `tools/windows/build.ps1` scripts for easy building.
+  - Configured `tools/windows/focus_mapper.spec` for correct packaging.
+- **Spec Version Merging**: The wizard and CLI now merge custom spec versions (from `--spec-dir`) with built-in versions, allowing users to select either from a single list.
+- **Extension Column Persistence**:
+  - The wizard now persists the `Data Type` and `Description` of extension columns to the mapping YAML and sidecar metadata.
+  - Added global prompt for validation overrides to streamline the wizard experience.
+  - Improved column header display in the wizard to show data type and value format.
+
 ## [0.5.0] - 2026-02-08
 
 ### Added
 - **Resumable Wizard**: The wizard now prompts for an output path early and can resume from an existing mapping file, skipping already configured columns.
 - **Incremental Saving**: The wizard saves the mapping file after every successful column definition to prevent data loss.
 - **CLI**: Added `--spec-dir` argument to `focus-mapper-wizard` to consistent with other tools.
+- **Skipped Columns Persistence**: The wizard now remembers which columns you explicitly skipped, preventing re-prompting when resuming a mapping session.
+- **Enhanced Extension Columns**:
+  - **Auto-Prefix**: Automatically appends `x_` to extension column names if omitted.
+  - **Full Mapping Support**: Extension columns now support all mapping operations (SQL, Pandas, Const, etc.) and data type selection.
 
 ### Fixed
 - **Null Operation**: Fixed a bug where selecting the `null` operation had no effect when `allow_nulls: true`.
@@ -19,14 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Refactored
 - **Spec Resolution**: Consolidated logic for resolving external spec directories into a reusable helper `_resolve_spec_search_paths`, eliminating code duplication in `focus_mapper/spec.py`.
-
-## [0.5.1] - 2026-02-08
-
-### Added
-- **Skipped Columns Persistence**: The wizard now remembers which columns you explicitly skipped, preventing re-prompting when resuming a mapping session.
-- **Enhanced Extension Columns**:
-  - **Auto-Prefix**: Automatically appends `x_` to extension column names if omitted.
-  - **Full Mapping Support**: Extension columns now support all mapping operations (SQL, Pandas, Const, etc.) and data type selection.
 
 ## [0.4.0] - 2026-02-08
 
