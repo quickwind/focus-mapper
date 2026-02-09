@@ -108,11 +108,7 @@ class SidecarMetadata:
     def parquet_kv_metadata(self) -> dict[bytes, bytes]:
         # Keep values short; Parquet metadata is key/value bytes.
         return {
-            b"SchemaId": self.schema_id.encode("utf-8"),
-            b"FocusVersion": self.spec_version.encode("utf-8"),
-            b"CreationDate": (self.creation_date or self.generated_at).encode("utf-8"),
-            b"DataGenerator": self.generator_name.encode("utf-8"),
-            b"DataGeneratorVersion": self.generator_version.encode("utf-8"),
+            b"FocusMetadata": json.dumps(self.to_dict()).encode("utf-8"),
         }
 
 

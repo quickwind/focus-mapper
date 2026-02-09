@@ -7,7 +7,7 @@ $ProjectRoot = Resolve-Path "$ScriptDir/../.."
 Write-Host "Building from project root: $ProjectRoot"
 
 if (-not (Test-Path "$ProjectRoot/pyproject.toml")) {
-    Write-Error "Could not verify project root."
+    Write-Host "Could not verify project root."
     exit 1
 }
 
@@ -19,9 +19,9 @@ try {
     python -m PyInstaller --version | Out-Null
 } catch {
     Write-Host "PyInstaller not found. Installing..."
-    pip install ".[build]"
+    pip install -e ".[build]"
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "Failed to install dependencies."
+        Write-Host 'Failed to install dependencies. Please install it via command: pip install -e ".[build]"'
         exit 1
     }
 }
@@ -36,7 +36,7 @@ python -m PyInstaller `
     "$ScriptDir/focus_mapper.spec"
 
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Build failed."
+    Write-Host "Build failed."
     exit 1
 }
 
