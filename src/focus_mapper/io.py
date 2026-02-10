@@ -35,7 +35,19 @@ def write_table(
 ) -> None:
     suffix = _suffix(path)
     if suffix == "csv":
-        df.to_csv(
+        # Ensure datetime columns are properly converted to UTC before formatting
+        df_copy = df.copy()
+        for col in df_copy.columns:
+            if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
+                # Convert to UTC timezone if not already
+                if df_copy[col].dt.tz is None:
+                    # Treat timezone-naive datetimes as UTC
+                    df_copy[col] = df_copy[col].dt.tz_localize('UTC')
+                else:
+                    # Convert timezone-aware datetimes to UTC
+                    df_copy[col] = df_copy[col].dt.tz_convert('UTC')
+        
+        df_copy.to_csv(
             path,
             index=False,
             date_format="%Y-%m-%dT%H:%M:%SZ",

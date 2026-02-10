@@ -279,7 +279,15 @@ def apply_steps(
                 series = pd.to_numeric(series, errors="coerce").astype("Int64")
                 continue
             if to == "datetime":
-                series = pd.to_datetime(series, utc=True, errors="coerce")
+                dt_series = pd.to_datetime(series, errors="coerce")
+                # Ensure proper UTC conversion - handle both timezone-naive and timezone-aware datetimes
+                if dt_series.dt.tz is None:
+                    # Treat timezone-naive datetimes as UTC
+                    dt_series = dt_series.dt.tz_localize('UTC')
+                else:
+                    # Convert timezone-aware datetimes to UTC
+                    dt_series = dt_series.dt.tz_convert('UTC')
+                series = dt_series
                 continue
             if to == "decimal":
                 scale = step.get("scale")
@@ -431,6 +439,16 @@ def apply_steps(
                         )
                     result = conn.execute(query).df().iloc[:, 0]
                 series = result
+                
+                # If the result is datetime-like, ensure it's converted to UTC
+                if pd.api.types.is_datetime64_any_dtype(series):
+                    if series.dt.tz is None:
+                        # Treat timezone-naive as UTC
+                        series = series.dt.tz_localize('UTC')
+                    else:
+                        # Convert timezone-aware to UTC
+                        series = series.dt.tz_convert('UTC')
+                        
             except Exception as e:
                 raise MappingExecutionError(
                     f"sql failed for target {target}: {e}"

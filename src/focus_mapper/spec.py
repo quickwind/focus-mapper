@@ -79,7 +79,15 @@ def coerce_series_to_type(series: pd.Series, col: FocusColumnSpec) -> pd.Series:
         if t == "string":
             return series.astype("string")
         if t == "date/time":
-            return pd.to_datetime(series, utc=True, errors="coerce")
+            dt_series = pd.to_datetime(series, errors="coerce")
+            # Ensure proper UTC conversion - handle both timezone-naive and timezone-aware datetimes
+            if dt_series.dt.tz is None:
+                # Treat timezone-naive datetimes as UTC
+                dt_series = dt_series.dt.tz_localize('UTC')
+            else:
+                # Convert timezone-aware datetimes to UTC
+                dt_series = dt_series.dt.tz_convert('UTC')
+            return dt_series
         if t == "decimal":
             return _coerce_decimal(series)
         if t == "json":
