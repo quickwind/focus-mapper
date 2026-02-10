@@ -21,6 +21,11 @@ from .api import (
 from .validate import ValidationReport, ValidationFinding, ValidationSummary
 from .metadata import SidecarMetadata
 from .mapping.config import MappingConfig, load_mapping_config
+from .datetime_utils import (
+    ensure_utc_datetime,
+    format_datetime_iso8601,
+    ensure_utc_and_format_datetime,
+)
 from .spec import FocusSpec, load_focus_spec
 
 __all__ = [
@@ -42,4 +47,8 @@ __all__ = [
     # Loaders
     "load_mapping_config",
     "load_focus_spec",
+    # Datetime utilities
+    "ensure_utc_datetime",
+    "format_datetime_iso8601",
+    "ensure_utc_and_format_datetime",
 ]

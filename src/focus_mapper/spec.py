@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 
 import pandas as pd
 
+from .datetime_utils import ensure_utc_datetime
 from .errors import SpecError
 
 
@@ -80,14 +81,7 @@ def coerce_series_to_type(series: pd.Series, col: FocusColumnSpec) -> pd.Series:
             return series.astype("string")
         if t == "date/time":
             dt_series = pd.to_datetime(series, errors="coerce")
-            # Ensure proper UTC conversion - handle both timezone-naive and timezone-aware datetimes
-            if dt_series.dt.tz is None:
-                # Treat timezone-naive datetimes as UTC
-                dt_series = dt_series.dt.tz_localize('UTC')
-            else:
-                # Convert timezone-aware datetimes to UTC
-                dt_series = dt_series.dt.tz_convert('UTC')
-            return dt_series
+            return ensure_utc_datetime(dt_series)
         if t == "decimal":
             return _coerce_decimal(series)
         if t == "json":

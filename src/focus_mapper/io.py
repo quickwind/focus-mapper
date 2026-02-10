@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .datetime_utils import ensure_utc_datetime
 from .errors import ParquetUnavailableError
 
 
@@ -39,13 +40,7 @@ def write_table(
         df_copy = df.copy()
         for col in df_copy.columns:
             if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
-                # Convert to UTC timezone if not already
-                if df_copy[col].dt.tz is None:
-                    # Treat timezone-naive datetimes as UTC
-                    df_copy[col] = df_copy[col].dt.tz_localize('UTC')
-                else:
-                    # Convert timezone-aware datetimes to UTC
-                    df_copy[col] = df_copy[col].dt.tz_convert('UTC')
+                df_copy[col] = ensure_utc_datetime(df_copy[col])
         
         df_copy.to_csv(
             path,
