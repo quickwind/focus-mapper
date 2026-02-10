@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 
 import pandas as pd
 
+from .datetime_utils import ensure_utc_datetime
 from .errors import SpecError
 
 
@@ -79,7 +80,8 @@ def coerce_series_to_type(series: pd.Series, col: FocusColumnSpec) -> pd.Series:
         if t == "string":
             return series.astype("string")
         if t == "date/time":
-            return pd.to_datetime(series, utc=True, errors="coerce")
+            dt_series = pd.to_datetime(series, errors="coerce")
+            return ensure_utc_datetime(dt_series)
         if t == "decimal":
             return _coerce_decimal(series)
         if t == "json":

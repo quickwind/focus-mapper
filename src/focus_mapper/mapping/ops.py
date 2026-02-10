@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 
+from ..datetime_utils import ensure_utc_datetime
 from ..errors import MappingExecutionError
 
 
@@ -279,7 +280,8 @@ def apply_steps(
                 series = pd.to_numeric(series, errors="coerce").astype("Int64")
                 continue
             if to == "datetime":
-                series = pd.to_datetime(series, utc=True, errors="coerce")
+                dt_series = pd.to_datetime(series, errors="coerce")
+                series = ensure_utc_datetime(dt_series)
                 continue
             if to == "decimal":
                 scale = step.get("scale")
@@ -431,6 +433,11 @@ def apply_steps(
                         )
                     result = conn.execute(query).df().iloc[:, 0]
                 series = result
+                
+                # If the result is datetime-like, ensure it's converted to UTC
+                if pd.api.types.is_datetime64_any_dtype(series):
+                    series = ensure_utc_datetime(series)
+                        
             except Exception as e:
                 raise MappingExecutionError(
                     f"sql failed for target {target}: {e}"

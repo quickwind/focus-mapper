@@ -26,7 +26,12 @@ shim_dir = os.path.join(project_root, 'tools', 'windows')
 
 # Data files to include (source, destination)
 # Source is relative to project root
-datas = [(os.path.join(project_root, 'src/focus_mapper/specs'), 'focus_mapper/specs')]
+datas = [
+    (os.path.join(project_root, 'src/focus_mapper/specs'), 'focus_mapper/specs'),
+    # Include iso4217parse data files from venv site-packages
+    (os.path.join(project_root, '.venv/Lib/site-packages/iso4217parse/data.json'), 'iso4217parse'),
+    (os.path.join(project_root, '.venv/Lib/site-packages/iso4217parse/symbols.json'), 'iso4217parse')
+]
 
 # --- focus-mapper CLI ---
 a_cli = Analysis(

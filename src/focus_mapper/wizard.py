@@ -20,6 +20,7 @@ from .wizard_lib import (
     prompt_choice,
     prompt_datetime_format,
 )
+from .datetime_utils import ensure_utc_and_format_datetime
 from .format_validators import (
     validate_key_value_format,
     validate_json_object_format,
@@ -503,7 +504,12 @@ def _prompt_for_steps(
                               validation_errors.append(f"Expected datetime type, got {dtype}.")
 
                     print("\nPreview results (first 5):")
-                    print(preview_series.head(5).to_string())
+                    # Format datetime columns for display
+                    preview_display = preview_series.head(5).copy()
+                    if pd.api.types.is_datetime64_any_dtype(preview_display):
+                        # Convert to UTC and format as ISO8601 with Z suffix
+                        preview_display = ensure_utc_and_format_datetime(preview_display)
+                    print(preview_display.to_string())
                     
                     if validation_errors:
                         print("\n⚠️  Validation Issues:")
