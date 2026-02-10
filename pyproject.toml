@@ -57,6 +57,7 @@ build = [
 [project.scripts]
 focus-mapper = "focus_mapper.cli:main"
 focus-mapper-wizard = "focus_mapper.wizard_cli:main"
+focus-mapper-gui = "focus_mapper.gui.main:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
