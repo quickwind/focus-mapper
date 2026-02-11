@@ -103,14 +103,65 @@ class MappingsListView(ttk.Frame):
         from focus_mapper.gui.views.editor import MappingEditorView
         from tkinter import simpledialog
         
-        # Prompt for spec version
-        spec_version = simpledialog.askstring("New Mapping", "Enter Spec Version (v1.1, v1.2, v1.3):", initialvalue="v1.3", parent=self)
+        # New: Use a custom dialog with Combobox
+        spec_version = self._ask_spec_version()
         if not spec_version:
             return
             
         self.app._clear_content()
         self.app.current_view = MappingEditorView(self.app.content_frame, self.app, file_path=None, template_spec=spec_version)
         self.app.current_view.pack(fill="both", expand=True)
+
+    def _ask_spec_version(self):
+        # Custom modal dialog for selection
+        dialog = tk.Toplevel(self)
+        dialog.title("New Mapping")
+        dialog.geometry("300x150") # Increased height
+        dialog.resizable(False, False)
+        
+        # Center relative to parent
+        self.update_idletasks()
+        x = self.winfo_rootx() + (self.winfo_width() // 2) - (300 // 2)
+        y = self.winfo_rooty() + (self.winfo_height() // 2) - (150 // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        result = [None] 
+        
+        def on_ok():
+            result[0] = cb.get()
+            dialog.destroy()
+            
+        def on_cancel():
+            dialog.destroy()
+
+        content = ttk.Frame(dialog, padding=20)
+        content.pack(fill="both", expand=True)
+        
+        ttk.Label(content, text="Select Spec Version:").pack(anchor="w", pady=(0, 5))
+        
+        # Get versions dynamically if possible, else hardcode
+        versions = ["v1.3", "v1.2", "v1.1"]
+        try:
+            from focus_mapper.spec import list_available_spec_versions
+            versions = sorted(list_available_spec_versions(), reverse=True)
+        except ImportError:
+            pass
+            
+        cb = ttk.Combobox(content, values=versions, state="readonly")
+        if versions:
+            cb.current(0)
+        cb.pack(fill="x", pady=(0, 15))
+        
+        btn_frame = ttk.Frame(content)
+        btn_frame.pack(fill="x")
+        ttk.Button(btn_frame, text="Cancel", command=on_cancel).pack(side="right", padx=5)
+        ttk.Button(btn_frame, text="OK", command=on_ok).pack(side="right")
+        
+        dialog.transient(self)
+        dialog.grab_set()
+        self.wait_window(dialog)
+        
+        return result[0]
 
     def on_import(self):
         file_path = filedialog.askopenfilename(
