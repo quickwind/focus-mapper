@@ -503,7 +503,8 @@ def _prompt_for_steps(
 
             steps.append({"op": op_type, **step_config})
             break
-
+    
+    return steps
 
 
 def _prompt_extension_columns(
