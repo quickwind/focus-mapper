@@ -247,7 +247,6 @@ def _prompt_for_steps(
     }
     allow_skip = target.feature_level.strip().lower() != "mandatory"
     steps: list[dict] = []
-    has_series = False
     allow_null = bool(target.allows_nulls)
     data_type = target.data_type.strip().lower() if target.data_type else ""
     is_string = data_type == "string"
@@ -257,45 +256,27 @@ def _prompt_for_steps(
         step_config: dict | None = None
         op_type = ""
 
-        if not has_series:
-            # Build menu options based on column properties
-            init_options: list[tuple[str, str]] = [
-                ("from_column", "from_column"),
-                ("const", "const"),
-            ]
-            if allow_null:
-                init_options.append(("null", "null"))
-            init_options.extend([
-                ("coalesce", "coalesce"),
-                ("map_values", "map_values"),
-                ("concat", "concat"),
-                ("math", "math"),
-                ("sql", "sql"),
-                ("pandas_expr", "pandas_expr"),
-            ])
-            if allow_skip:
-                init_options.append(("skip", "skip"))
+        # Build menu options based on column properties
+        options: list[tuple[str, str]] = [
+            ("from_column", "from_column"),
+            ("const", "const"),
+        ]
+        if allow_null:
+            options.append(("null", "null"))
+        options.extend([
+            ("coalesce", "coalesce"),
+            ("map_values", "map_values"),
+            ("concat", "concat"),
+            ("math", "math"),
+            ("sql", "sql"),
+            ("pandas_expr", "pandas_expr"),
+        ])
+        if allow_skip:
+            options.append(("skip", "skip"))
             
-            choice = prompt_menu(prompt, "Choose mapping (init):", init_options)
-            if choice == "skip":
-                return []
-        else:
-            # Build add-step options
-            add_options: list[tuple[str, str]] = [("map_values", "map_values")]
-            if allow_cast:
-                add_options.append(("cast", "cast"))
-            add_options.extend([
-                ("round", "round"),
-                ("math", "math"),
-                ("when", "when"),
-                ("sql", "sql"),
-                ("pandas_expr", "pandas_expr"),
-                ("done", "done"),
-            ])
-            
-            choice = prompt_menu(prompt, "Add additional step (if needed): ", add_options, default="done")
-            if choice == "done":
-                return steps
+        choice = prompt_menu(prompt, "Choose mapping:", options)
+        if choice == "skip":
+            return []
 
         # --- Gather Step Inputs ---
         if choice == "from_column":
@@ -369,9 +350,7 @@ def _prompt_for_steps(
             op_type = "coalesce"
             step_config = {"columns": cols}
         elif choice == "map_values":
-            col = None
-            if not has_series:
-                 col = _pick_column(columns, prompt=prompt, suggested=suggested)
+            col = _pick_column(columns, prompt=prompt, suggested=suggested)
             mapping: dict[str, str] = {}
             print("Enter mapping pairs (empty key to finish).")
             while True:
@@ -398,15 +377,11 @@ def _prompt_for_steps(
             operands: list[dict] = []
             while True:
                 kind_prompt = "Add operand type [column|const] (empty to finish): "
-                if has_series:
-                     kind_prompt = "Add operand type [current|column|const] (empty to finish): "
                 
                 kind = prompt(kind_prompt).strip()
                 if not kind:
                     break
-                if kind == "current" and has_series:
-                    operands.append({"current": True})
-                elif kind == "column":
+                if kind == "column":
                     col = _pick_column(columns, prompt=prompt, suggested=suggested)
                     operands.append({"column": col})
                 elif kind == "const":
@@ -527,7 +502,7 @@ def _prompt_for_steps(
                         continue
 
             steps.append({"op": op_type, **step_config})
-            has_series = True
+            break
 
 
 
