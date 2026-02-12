@@ -1,4 +1,4 @@
-name: Publish to PyPI
+name: Publish to PyPI and GitHub Release
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - "v*"
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,11 +29,61 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: dist-linux
           path: dist/
 
-  publish:
-    needs: build
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e ".[build,parquet]"
+
+      - name: Build executables using existing script
+        run: |
+          cd tools\windows
+          .\build.bat
+
+      - name: Create distribution directory
+        run: |
+          mkdir dist-windows
+          copy dist-win\focus-mapper.exe dist-windows\
+          copy dist-win\focus-mapper-wizard.exe dist-windows\
+          copy README.md dist-windows\
+          copy LICENSE dist-windows\
+
+      - name: Create version info file
+        run: |
+          $version = "${{ github.ref_name }}" -replace "v", ""
+          echo "Focus Mapper v$version" > dist-windows\VERSION.txt
+          echo "Build date: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" >> dist-windows\VERSION.txt
+          echo "Commit: ${{ github.sha }}" >> dist-windows\VERSION.txt
+
+      - name: Test executables
+        run: |
+          dist-windows\focus-mapper.exe --help
+          dist-windows\focus-mapper-wizard.exe --version
+
+      - name: Create zip archive
+        run: |
+          cd dist-windows
+          7z a -tzip ..\focus-mapper-windows.zip *
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: focus-mapper-windows.zip
+
+  publish-pypi:
+    needs: build-linux
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -43,12 +93,29 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: dist
+          name: dist-linux
           path: dist/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        # For Trusted Publishers, no password needed!
-        # If using API token instead, uncomment below:
-        # with:
-        #   password: ${{ secrets.PYPI_API_TOKEN }}
+
+  upload-release-assets:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist-windows
+          path: ./
+
+      - name: Upload Windows assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            focus-mapper-windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
