@@ -47,14 +47,18 @@ class MappingsListView(ttk.Frame):
 
 
         # Mappings List (Treeview)
-        columns = ("filename", "spec_version", "modified")
+        columns = ("filename", "dataset_type", "dataset_instance", "column_count", "modified")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", selectmode="browse")
-        self.tree.heading("filename", text="Filename")
-        self.tree.heading("spec_version", text="Spec Version")
-        self.tree.heading("modified", text="Last Modified")
-        self.tree.column("filename", width=250)
-        self.tree.column("spec_version", width=80)
-        self.tree.column("modified", width=150)
+        self.tree.heading("filename", text="File Name")
+        self.tree.heading("dataset_type", text="Dataset Type")
+        self.tree.heading("dataset_instance", text="Dataset Instance Name")
+        self.tree.heading("column_count", text="Column Count")
+        self.tree.heading("modified", text="Last Modified Time")
+        self.tree.column("filename", width=220)
+        self.tree.column("dataset_type", width=130)
+        self.tree.column("dataset_instance", width=200)
+        self.tree.column("column_count", width=110)
+        self.tree.column("modified", width=170)
         
         # Scrollbar
         scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
@@ -80,17 +84,33 @@ class MappingsListView(ttk.Frame):
             from datetime import datetime
             dt = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d %H:%M:%S')
             
-            # Read spec version
+            # Read mapping details
             spec_ver = "-"
+            dataset_type = "-"
+            dataset_instance_name = "-"
+            column_count = 0
             try:
                 with open(file_path, "r") as f:
                     data = yaml.safe_load(f)
                     if isinstance(data, dict):
                         spec_ver = data.get("spec_version", "-")
+                        dataset_type = data.get("dataset_type", "-")
+                        dataset_instance_name = data.get("dataset_instance_name", "-")
+                        mappings = data.get("mappings", {})
+                        if isinstance(mappings, dict):
+                            column_count = len(mappings)
             except Exception:
                 pass
-            
-            self.tree.insert("", "end", iid=str(file_path), values=(file_path.name, spec_ver, dt))
+
+            if spec_ver not in {"v1.3", "1.3"}:
+                dataset_instance_name = "-"
+
+            self.tree.insert(
+                "",
+                "end",
+                iid=str(file_path),
+                values=(file_path.name, dataset_type, dataset_instance_name, column_count, dt),
+            )
 
     def get_selected_path(self):
         selection = self.tree.selection()
