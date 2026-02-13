@@ -56,9 +56,8 @@ def test_wizard_records_skipped_columns(mock_spec, sample_df):
     
     # Menu choices calls:
     # 1. MandatoryCol (Init) -> "const"
-    # 2. MandatoryCol (Add Step) -> "done"
-    # 3. OptionalCol (Init) -> "skip"
-    menu_choices = ["const", "done", "skip"]
+    # 2. OptionalCol (Init) -> "skip"
+    menu_choices = ["const", "skip"]
     menu_iter = iter(menu_choices)
     
     def menu_side_effect(prompt, header, options, default=None):
@@ -66,7 +65,7 @@ def test_wizard_records_skipped_columns(mock_spec, sample_df):
             val = next(menu_iter)
             return val
         except StopIteration:
-            return default
+            raise StopIteration("Menu choices exhausted")
 
     with patch("focus_mapper.wizard.prompt_menu", side_effect=menu_side_effect):
         result = run_wizard(
@@ -106,19 +105,17 @@ def test_wizard_extension_enhancements(mock_spec, sample_df):
     
     # Menu choices:
     # 1. Mandatory (Init) -> "const"
-    # 2. Mandatory (Add Step) -> "done"
-    # 3. Optional (Init) -> "skip"
-    # 4. Extension (Type) -> "string"  <-- NEW
-    # 5. Extension (Init) -> "const"
-    # 6. Extension (Add Step) -> "done"
-    menu_choices = ["const", "done", "skip", "string", "const", "done"]
+    # 2. Optional (Init) -> "skip"
+    # 3. Extension (Type) -> "string"
+    # 4. Extension (Init) -> "const"
+    menu_choices = ["const", "skip", "string", "const"]
     menu_iter = iter(menu_choices)
 
     def menu_side_effect(prompt, header, options, default=None):
         try:
             return next(menu_iter)
         except StopIteration:
-            return default
+            raise StopIteration("Menu choices exhausted")
 
     with patch("focus_mapper.wizard.prompt_menu", side_effect=menu_side_effect):
         result = run_wizard(
@@ -190,17 +187,6 @@ def test_extension_autosave(mock_spec, sample_df):
     """Test that extension columns trigger save_callback immediately."""
     
     # Inputs:
-    # 1. Dataset
-    # 2. Defaults
-    # 3. Mand -> const
-    # 4. Mand Valid
-    # 5. Add ext? y
-    # 6. suffix
-    # 7. desc
-    # 8. type
-    # 9. const
-    # 10. valid
-    # 11. Add ext? n
     inputs = [
         "TestDS", "y", 
         "y", # Global valid? y
@@ -213,18 +199,16 @@ def test_extension_autosave(mock_spec, sample_df):
     
     # Menu choices:
     # 1. Mandatory (Init) -> "const"
-    # 2. Mandatory (Add Step) -> "done"
-    # 3. Optional (Init) -> "skip"
-    # 4. Extension (Type) -> "string"  <-- NEW
-    # 5. Extension (Init) -> "const"
-    # 6. Extension (Add Step) -> "done"
-    menu_choices = ["const", "done", "skip", "string", "const", "done"]
+    # 2. Optional (Init) -> "skip"
+    # 3. Extension (Type) -> "string"
+    # 4. Extension (Init) -> "const"
+    menu_choices = ["const", "skip", "string", "const"]
     menu_iter = iter(menu_choices)
     def menu_side_effect(prompt, header, options, default=None):
         try:
             return next(menu_iter)
         except StopIteration:
-            return default
+            raise StopIteration("Menu choices exhausted")
 
     save_callback = MagicMock()
     
@@ -258,23 +242,6 @@ def test_wizard_extension_prevent_duplicates(mock_spec, sample_df):
     """Test that wizard prevents adding duplicate extension columns."""
     
     # Inputs:
-    # 1. Dataset
-    # 2. Defaults
-    # 3. Global Valid? n
-    # 4. Mand -> const
-    # 5. Add ext? y
-    # 6. suffix: "uniq"
-    # 7. desc
-    # 8. type: string (via menu)
-    # 9. const
-    # 10. Add ext? y
-    # 11. suffix: "uniq" (DUPLICATE - should reject and loop)
-    # 12. suffix: "uniq2" (valid)
-    # 13. desc
-    # 14. type: string
-    # 15. const
-    # 16. Add ext? n
-    
     inputs = [
         "TestDS", "y", "n", 
         "A", 
@@ -294,18 +261,15 @@ def test_wizard_extension_prevent_duplicates(mock_spec, sample_df):
     
     # Menu choices:
     # 1. Mandatory (Init) -> "const"
-    # 2. Mandatory (Add Step) -> "done"
-    # 3. Optional (Init) -> "skip"
-    # 4. Ext 1 (Type) -> "string"
-    # 5. Ext 1 (Init) -> "const"
-    # 6. Ext 1 (Add Step) -> "done"
-    # 7. Ext 2 (Type) -> "string"
-    # 8. Ext 2 (Init) -> "const"
-    # 9. Ext 2 (Add Step) -> "done"
+    # 2. Optional (Init) -> "skip"
+    # 3. Ext 1 (Type) -> "string"
+    # 4. Ext 1 (Init) -> "const"
+    # 5. Ext 2 (Type) -> "string"
+    # 6. Ext 2 (Init) -> "const"
     menu_choices = [
-        "const", "done", "skip", 
-        "string", "const", "done", 
-        "string", "const", "done"
+        "const", "skip", 
+        "string", "const", 
+        "string", "const"
     ]
     menu_iter = iter(menu_choices)
     
@@ -313,42 +277,8 @@ def test_wizard_extension_prevent_duplicates(mock_spec, sample_df):
         try:
             return next(menu_iter)
         except StopIteration:
-            return default
+            raise StopIteration("Menu choices exhausted")
 
-    # Mock prompt_bool to return True for "Add ext?" and False for others/end
-    # Inputs list for prompt_bool:
-    # 1. Global Valid? -> False (handled by inputs list usually? No prompt_bool handles its own)
-    # Wait, prompt_bool uses `prompt` fixture if not mocked separately.
-    # In my tests usually `prompt` function handles string inputs.
-    # But `prompt_bool` calls `prompt`. 
-    # Let's verify `run_wizard` usage. 
-    # `ask_validation_overrides` uses prompt_bool.
-    # `add` (extension) uses prompt_bool (changed by user).
-    
-    # If `prompt_bool` uses `prompt` (the fixture), then my inputs list should contain "y" or "n".
-    # User changed `add = prompt_bool(...)`.
-    # `prompt_bool` implementation calls `prompt(...)`.
-    
-    # So my inputs list MUST contain "y"/"n" strings for boolean prompts.
-    
-    # Inputs re-verified:
-    # prompt("Dataset") -> "TestDS"
-    # prompt_bool("Defaults") -> "y" (via prompt)
-    # prompt_bool("Global Valid") -> "n"
-    # prompt("Mandatory") -> "A" (via const loop logic)
-    # prompt_bool("Add ext?") -> "y"
-    # prompt("Suffix") -> "uniq"
-    # prompt("Desc") -> "desc1"
-    # prompt_menu("Type") -> (handled by side_effect)
-    # prompt("Const") -> "B"
-    # prompt_bool("Add ext?") -> "y"
-    # prompt("Suffix") -> "uniq" (Duplicate test)
-    # prompt("Suffix") -> "uniq2"
-    # prompt("Desc") -> "desc2"
-    # prompt_menu("Type") -> (handled by side_effect)
-    # prompt("Const") -> "C"
-    # prompt_bool("Add ext?") -> "n"
-    
     with patch("focus_mapper.wizard.prompt_menu", side_effect=menu_side_effect):
         result = run_wizard(
             spec=mock_spec,
@@ -373,27 +303,6 @@ def test_wizard_extension_suggestion(mock_spec, sample_df):
     # This should trigger suggestion logic.
     
     # Inputs:
-    # 1. Dataset
-    # 2. Defaults
-    # 3. Global Valid? n
-    # 4. Mandatory -> Skip (to focus on ext)
-    #    (Wait, Mandatory prompt loops until mapped?)
-    #    mock_spec has MandatoryCol. 
-    #    We can map it quickly to const.
-    # 5. Add ext? y
-    # 6. Suffix: "source_col"
-    #    -> Suggestion found: "source_col"
-    #    -> Inferred type? "source_col" in sample_df has strings ["a", "b"].
-    #       So inferred type is "string".
-    # 7. Desc
-    # 8. Type menu (default string).
-    #    We mocking menu, so we check if default matches?
-    #    Hard to check default in side_effect.
-    #    But we can just select "string".
-    # 9. Init -> "from_column"
-    # 10. "Use suggested column 'source_col'?" -> y
-    # 11. Add ext? n
-    
     inputs = [
         "TestDS", "y", "n", 
         "A",             # Mandatory -> const "A"
@@ -406,15 +315,19 @@ def test_wizard_extension_suggestion(mock_spec, sample_df):
         "n"              # Finish
     ]
     
-    menu_choices = ["const", "done", "skip", "string", "from_column"]
+    # Menu choices:
+    # 1. Mandatory (Init) -> "const"
+    # 2. Optional (Init) -> "skip"
+    # 3. Extension (Type) -> "string"
+    # 4. Extension (Init) -> "from_column"
+    menu_choices = ["const", "skip", "string", "from_column"]
     menu_iter = iter(menu_choices)
     
     def menu_side_effect(prompt, header, options, default=None):
         try:
-            val = next(menu_iter)
-            return val
+            return next(menu_iter)
         except StopIteration:
-            return default
+            raise StopIteration("Menu choices exhausted")
 
     with patch("focus_mapper.wizard.prompt_menu", side_effect=menu_side_effect):
         result = run_wizard(

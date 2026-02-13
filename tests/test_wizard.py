@@ -17,7 +17,7 @@ def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:
     ]
     mandatory_cols = [c for c in spec.columns if c.feature_level.lower() == "mandatory"]
     for col in mandatory_cols:
-        inputs_list.append("2")  # const
+        inputs_list.append("const")  # const
         if col.allowed_values:
             inputs_list.append(col.allowed_values[0])
         elif col.allows_nulls:
@@ -31,7 +31,6 @@ def test_wizard_generates_mapping_with_defaults(monkeypatch) -> None:
                 inputs_list.append("2024-01-01T00:00:00Z")
             else:
                 inputs_list.append("X")
-        inputs_list.append("done")  # finish steps
         inputs_list.append("n")  # no per-column validation override
     inputs_list.append("n")  # no extension
     inputs = iter(inputs_list)
