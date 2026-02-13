@@ -83,7 +83,9 @@ def validate_focus_dataframe(
     6. Formats: Basic checks for standard formats (e.g., ISO 4217 currency codes).
     """
     findings: list[ValidationFinding] = []
-    default_validation = mapping.validation_defaults if mapping else {}
+    default_validation = (
+        mapping.validation_defaults if mapping and mapping.validation_defaults else default_validation_settings()
+    )
 
     def effective_validation(col_name: str) -> dict[str, Any]:
         base = _deep_merge({}, default_validation)
@@ -493,6 +495,30 @@ def validate_focus_dataframe(
         findings=findings,
         spec_version=spec.version,
     )
+
+
+def default_validation_settings() -> dict:
+    return {
+        "mode": "permissive",
+        "datetime": {"format": None},
+        "decimal": {
+            "precision": None,
+            "scale": None,
+            "integer_only": False,
+            "min": None,
+            "max": None,
+        },
+        "string": {
+            "min_length": None,
+            "max_length": None,
+            "allow_empty": True,
+            "trim": True,
+        },
+        "json": {"object_only": False},
+        "allowed_values": {"case_insensitive": False},
+        "nullable": {"allow_nulls": None},
+        "presence": {"enforce": True},
+    }
 
 
 def write_validation_report(report: ValidationReport, path: Path) -> None:

@@ -31,6 +31,7 @@ from .format_validators import (
     validate_boolean,
     validate_collection_of_strings,
 )
+from .validate import default_validation_settings
 
 
 @dataclass(frozen=True)
@@ -239,12 +240,6 @@ def _prompt_for_steps(
         header += f"\n\n\t(suggested input: {suggested})"
     _ = print(f"{header}\n")
 
-    allow_cast = target.data_type.strip().lower() not in {
-        "string",
-        "decimal",
-        "date/time",
-        "json",
-    }
     allow_skip = target.feature_level.strip().lower() != "mandatory"
     steps: list[dict] = []
     has_series = False
@@ -282,8 +277,6 @@ def _prompt_for_steps(
         else:
             # Build add-step options
             add_options: list[tuple[str, str]] = [("map_values", "map_values")]
-            if allow_cast:
-                add_options.append(("cast", "cast"))
             add_options.extend([
                 ("round", "round"),
                 ("math", "math"),
@@ -796,27 +789,7 @@ def _prompt_validation_defaults(*, prompt: PromptFunc) -> dict:
 
 
 def _default_validation_settings() -> dict:
-    return {
-        "mode": "permissive",
-        "datetime": {"format": None},
-        "decimal": {
-            "precision": None,
-            "scale": None,
-            "integer_only": False,
-            "min": None,
-            "max": None,
-        },
-        "string": {
-            "min_length": None,
-            "max_length": None,
-            "allow_empty": True,
-            "trim": True,
-        },
-        "json": {"object_only": False},
-        "allowed_values": {"case_insensitive": False},
-        "nullable": {"allow_nulls": None},
-        "presence": {"enforce": True},
-    }
+    return default_validation_settings()
 
 
 def _prompt_column_validation(

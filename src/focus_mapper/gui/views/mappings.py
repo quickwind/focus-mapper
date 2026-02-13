@@ -47,17 +47,19 @@ class MappingsListView(ttk.Frame):
 
 
         # Mappings List (Treeview)
-        columns = ("filename", "dataset_type", "dataset_instance", "column_count", "modified")
+        columns = ("filename", "dataset_type", "dataset_instance", "column_count", "status", "modified")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", selectmode="browse")
         self.tree.heading("filename", text="File Name")
         self.tree.heading("dataset_type", text="Dataset Type")
         self.tree.heading("dataset_instance", text="Dataset Instance Name")
         self.tree.heading("column_count", text="Column Count")
+        self.tree.heading("status", text="Status")
         self.tree.heading("modified", text="Last Modified Time")
         self.tree.column("filename", width=220)
         self.tree.column("dataset_type", width=130)
         self.tree.column("dataset_instance", width=200)
         self.tree.column("column_count", width=110)
+        self.tree.column("status", width=90)
         self.tree.column("modified", width=170)
         
         # Scrollbar
@@ -89,6 +91,7 @@ class MappingsListView(ttk.Frame):
             dataset_type = "-"
             dataset_instance_name = "-"
             column_count = 0
+            status = "Ready"
             try:
                 with open(file_path, "r") as f:
                     data = yaml.safe_load(f)
@@ -99,6 +102,21 @@ class MappingsListView(ttk.Frame):
                         mappings = data.get("mappings", {})
                         if isinstance(mappings, dict):
                             column_count = len(mappings)
+                        # Ready/Not Ready check: any mandatory column missing or empty steps
+                        try:
+                            from focus_mapper.spec import load_focus_spec
+                            spec = load_focus_spec(spec_ver)
+                            mapped_cols = {
+                                k
+                                for k, v in (mappings or {}).items()
+                                if isinstance(v, dict) and v.get("steps")
+                            }
+                            for col in spec.mandatory_columns:
+                                if col.name not in mapped_cols:
+                                    status = "Not Ready"
+                                    break
+                        except Exception:
+                            pass
             except Exception:
                 pass
 
@@ -109,8 +127,10 @@ class MappingsListView(ttk.Frame):
                 "",
                 "end",
                 iid=str(file_path),
-                values=(file_path.name, dataset_type, dataset_instance_name, column_count, dt),
+                values=(file_path.name, dataset_type, dataset_instance_name, column_count, status, dt),
+                tags=("not_ready",) if status == "Not Ready" else (),
             )
+        self.tree.tag_configure("not_ready", foreground="red")
 
     def get_selected_path(self):
         selection = self.tree.selection()

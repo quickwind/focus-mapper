@@ -4,8 +4,194 @@ from pathlib import Path
 import yaml
 
 from focus_mapper.spec import load_focus_spec
+from focus_mapper.validate import default_validation_settings
 from focus_mapper.mapping.config import load_mapping_config, MappingConfig, MappingRule
-from focus_mapper.gui.components.step_forms import get_form_class
+
+
+class _WidgetTooltip:
+    def __init__(self, widget):
+        self.widget = widget
+        self.tip = None
+        self.label = None
+
+    def show(self, text: str):
+        if not text:
+            self.hide()
+            return
+        if self.tip is None:
+            self.tip = tk.Toplevel(self.widget)
+            self.tip.wm_overrideredirect(True)
+            self.tip.attributes("-topmost", True)
+            self.label = ttk.Label(self.tip, text=text, padding=6, background="#ffffe0")
+            self.label.pack()
+        else:
+            self.label.config(text=text)
+        x = self.widget.winfo_rootx() + 10
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        self.tip.geometry(f"+{x}+{y}")
+
+    def hide(self):
+        if self.tip is not None:
+            self.tip.destroy()
+            self.tip = None
+            self.label = None
+
+
+def _set_tooltip(widget, text: str):
+    if not text:
+        return
+    if not hasattr(widget, "_tooltip"):
+        widget._tooltip = _WidgetTooltip(widget)
+        def on_enter(_e, w=widget):
+            w._tooltip.show(getattr(w, "_tooltip_text", ""))
+        def on_leave(_e, w=widget):
+            w._tooltip.hide()
+        widget.bind("<Enter>", on_enter)
+        widget.bind("<Leave>", on_leave)
+    widget._tooltip_text = text
+
+
+def _create_star(parent, tooltip: str, **pack_opts):
+    star = ttk.Label(parent, text="*", foreground="red")
+    star._pack_opts = pack_opts
+    star.pack(**pack_opts)
+    _set_tooltip(star, tooltip)
+    return star
+
+
+def _set_star_visible(star, show: bool, tooltip: str | None = None):
+    if star is None:
+        return
+    if tooltip:
+        _set_tooltip(star, tooltip)
+    if show:
+        if not star.winfo_ismapped():
+            star.pack(**getattr(star, "_pack_opts", {}))
+    else:
+        star.pack_forget()
+
+
+class _OpPicker:
+    def __init__(self, parent, options: list[str], descriptions: dict[str, str]):
+        self.parent = parent
+        self.options = options
+        self.descriptions = descriptions
+        self.result: str | None = None
+
+    def show(self, title: str, current: str | None = None) -> str | None:
+        dialog = tk.Toplevel(self.parent)
+        dialog.title(title)
+        dialog.resizable(False, False)
+
+        self.parent.update_idletasks()
+        w, h = 320, 240
+        x = self.parent.winfo_rootx() + (self.parent.winfo_width() // 2) - (w // 2)
+        y = self.parent.winfo_rooty() + (self.parent.winfo_height() // 2) - (h // 2)
+        dialog.geometry(f"{w}x{h}+{x}+{y}")
+
+        content = ttk.Frame(dialog, padding=10)
+        content.pack(fill="both", expand=True)
+        ttk.Label(content, text="Select operation type:").pack(anchor="w", pady=(0, 6))
+
+        listbox = tk.Listbox(content, height=8)
+        listbox.pack(fill="both", expand=True)
+        for opt in self.options:
+            listbox.insert("end", opt)
+
+        tooltip = _WidgetTooltip(listbox)
+
+        def on_motion(event):
+            idx = listbox.nearest(event.y)
+            if idx < 0 or idx >= len(self.options):
+                tooltip.hide()
+                return
+            opt = self.options[idx]
+            tooltip.show(self.descriptions.get(opt, ""))
+
+        listbox.bind("<Motion>", on_motion)
+        listbox.bind("<Leave>", lambda _e: tooltip.hide())
+
+        if current in self.options:
+            listbox.selection_set(self.options.index(current))
+
+        def on_ok():
+            sel = listbox.curselection()
+            if not sel:
+                self.result = None
+            else:
+                self.result = self.options[sel[0]]
+            dialog.destroy()
+
+        def on_cancel():
+            self.result = None
+            dialog.destroy()
+
+        btns = ttk.Frame(content)
+        btns.pack(fill="x", pady=(8, 0))
+        ttk.Button(btns, text="Cancel", command=on_cancel).pack(side="right")
+        ttk.Button(btns, text="OK", command=on_ok).pack(side="right", padx=6)
+
+        dialog.transient(self.parent)
+        dialog.grab_set()
+        self.parent.wait_window(dialog)
+        return self.result
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    out = dict(base)
+    for k, v in override.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out.get(k, {}), v)
+        else:
+            out[k] = v
+    return out
+
+
+def _deep_diff(base: dict, modified: dict) -> dict:
+    diff: dict = {}
+    for k, v in modified.items():
+        if k not in base:
+            diff[k] = v
+            continue
+        b = base[k]
+        if isinstance(v, dict) and isinstance(b, dict):
+            child = _deep_diff(b, v)
+            if child:
+                diff[k] = child
+        else:
+            if v != b:
+                diff[k] = v
+    return diff
+
+
+class _TreeTooltip:
+    def __init__(self, widget: ttk.Treeview):
+        self.widget = widget
+        self.tip = None
+        self.label = None
+        self.current_iid = None
+
+    def show(self, text: str, x: int, y: int, iid: str):
+        if not text:
+            self.hide()
+            return
+        if self.tip is None:
+            self.tip = tk.Toplevel(self.widget)
+            self.tip.wm_overrideredirect(True)
+            self.tip.attributes("-topmost", True)
+            self.label = ttk.Label(self.tip, text=text, padding=6, background="#ffffe0")
+            self.label.pack()
+        else:
+            self.label.config(text=text)
+        self.tip.geometry(f"+{x}+{y}")
+        self.current_iid = iid
+
+    def hide(self):
+        if self.tip is not None:
+            self.tip.destroy()
+            self.tip = None
+            self.label = None
+        self.current_iid = None
 
 class MappingEditorView(ttk.Frame):
     def __init__(
@@ -27,7 +213,7 @@ class MappingEditorView(ttk.Frame):
         self.mappings_dir = Path.home() / ".focus_mapper" / "mappings"
         # Mutable state
         self.rules_dict = {} # target -> MappingRule object (or dict wrapper)
-        self.validation_defaults = {}
+        self.validation_defaults = default_validation_settings()
         
         self.spec = None
         self.current_column = None
@@ -43,17 +229,34 @@ class MappingEditorView(ttk.Frame):
                 self.spec_version = config.spec_version
                 self.dataset_type = config.dataset_type
                 self.dataset_instance_name = config.dataset_instance_name
-                self.validation_defaults = config.validation_defaults
+                self.validation_defaults = config.validation_defaults or default_validation_settings()
                 # Convert list to dict for editing
                 self.rules_dict = {r.target: r for r in config.rules}
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to load mapping: {e}")
-                self.app.show_mappings_view()
-                return
+                for rule in self.rules_dict.values():
+                    if getattr(rule, "steps", None) and len(rule.steps) > 1:
+                        rule.steps[:] = rule.steps[:1]
+            except Exception:
+                # Fallback: allow opening mappings with empty/partial configs
+                try:
+                    raw = yaml.safe_load(self.file_path.read_text(encoding="utf-8")) or {}
+                    if isinstance(raw, dict):
+                        self.spec_version = raw.get("spec_version", self.spec_version)
+                        self.dataset_type = raw.get("dataset_type", self.dataset_type)
+                        self.dataset_instance_name = raw.get("dataset_instance_name", self.dataset_instance_name)
+                        validation = raw.get("validation", {})
+                        if isinstance(validation, dict):
+                            self.validation_defaults = validation.get("default", {}) or default_validation_settings()
+                        self.rules_dict = {}
+                    else:
+                        raise ValueError("Invalid mapping format")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to load mapping: {e}")
+                    self.app.show_mappings_view()
+                    return
         else:
             # New mapping - start empty
             self.rules_dict = {}
-            self.validation_defaults = {}
+            self.validation_defaults = default_validation_settings()
             if not self.dataset_type:
                 self.dataset_type = "CostAndUsage"
             if not self.file_path:
@@ -71,6 +274,7 @@ class MappingEditorView(ttk.Frame):
         toolbar.pack(fill="x", pady=5)
         ttk.Button(toolbar, text="Back", command=self.on_back).pack(side="left")
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=5)
+        ttk.Button(toolbar, text="Validation Defaults", command=self.on_edit_validation_defaults).pack(side="left")
         ttk.Button(toolbar, text="Save", command=self.on_save).pack(side="right")
 
         meta = ttk.Frame(self)
@@ -148,9 +352,20 @@ class MappingEditorView(ttk.Frame):
         ttk.Button(tree_toolbar, text="+", width=3, command=self.on_add_column).pack(side="right")
         ttk.Label(tree_toolbar, text="Columns").pack(side="left")
 
-        self.tree = ttk.Treeview(left_frame, columns=("status",), show="tree headings", selectmode="browse")
+        self.tree = ttk.Treeview(
+            left_frame,
+            columns=("status", "feature_level", "data_type", "nullable"),
+            show="tree headings",
+            selectmode="browse",
+        )
         self.tree.heading("status", text="Status")
-        self.tree.column("status", width=50)
+        self.tree.heading("feature_level", text="Feature Level")
+        self.tree.heading("data_type", text="Data Type")
+        self.tree.heading("nullable", text="Nullable")
+        self.tree.column("status", width=60)
+        self.tree.column("feature_level", width=110)
+        self.tree.column("data_type", width=180)
+        self.tree.column("nullable", width=80)
         self.tree.column("#0", width=200)
         self.tree.heading("#0", text="Column Name")
         
@@ -161,6 +376,12 @@ class MappingEditorView(ttk.Frame):
         scrollbar.pack(side="right", fill="y")
         
         self.tree.bind("<<TreeviewSelect>>", self.on_column_select)
+        self.tree.bind("<Motion>", self._on_tree_hover)
+        self.tree.bind("<Leave>", self._on_tree_leave)
+        self._tree_tooltip = _TreeTooltip(self.tree)
+        self._col_descriptions: dict[str, str] = {}
+        self._sort_state: dict[str, bool] = {}
+        self._setup_tree_sorting()
 
         # Right: Column Details
         self.right_frame = ttk.Frame(paned)
@@ -170,7 +391,7 @@ class MappingEditorView(ttk.Frame):
 
     def _populate_tree(self):
         # Merge spec columns and existing config
-        mapped_cols = set(self.rules_dict.keys())
+        mapped_cols = {k for k, v in self.rules_dict.items() if getattr(v, "steps", [])}
         spec_cols = set()
         if self.spec:
             spec_cols = {c.name for c in self.spec.columns}
@@ -181,9 +402,90 @@ class MappingEditorView(ttk.Frame):
         for item in self.tree.get_children():
             self.tree.delete(item)
 
+        self._col_descriptions = {}
         for col in all_cols:
             status = "Mapped" if col in mapped_cols else "-"
-            self.tree.insert("", "end", iid=col, text=col, values=(status,))
+            feature_level = "Extension" if col.startswith("x_") else "-"
+            data_type = "-"
+            nullable = "-"
+            description = ""
+            if self.spec:
+                spec_col = self.spec.get_column(col)
+                if spec_col:
+                    feature_level = spec_col.feature_level
+                    data_type = spec_col.data_type
+                    if spec_col.value_format:
+                        data_type = f"{data_type} ({spec_col.value_format})"
+                    nullable = "Yes" if spec_col.allows_nulls else "No"
+                    description = spec_col.description or ""
+                    if feature_level.lower() == "mandatory" and col not in mapped_cols:
+                        status = "TBD"
+            self._col_descriptions[col] = description
+            self.tree.insert(
+                "",
+                "end",
+                iid=col,
+                text=col,
+                values=(status, feature_level, data_type, nullable),
+                tags=("tbd",) if status == "TBD" else (),
+            )
+        self.tree.tag_configure("tbd", foreground="red")
+
+    def _setup_tree_sorting(self):
+        for col in self.tree["columns"]:
+            self.tree.heading(col, command=lambda c=col: self._sort_tree(c))
+        self.tree.heading("#0", command=lambda: self._sort_tree("#0"))
+        self._refresh_sort_headers()
+
+    def _sort_tree(self, col: str):
+        items = []
+        for iid in self.tree.get_children(""):
+            if col == "#0":
+                value = self.tree.item(iid, "text")
+            else:
+                value = self.tree.set(iid, col)
+            items.append((value, iid))
+
+        reverse = not self._sort_state.get(col, False)
+        items.sort(key=lambda v: (str(v[0]).lower()), reverse=reverse)
+
+        for index, (_, iid) in enumerate(items):
+            self.tree.move(iid, "", index)
+
+        self._sort_state = {col: reverse}
+        self._refresh_sort_headers()
+
+    def _refresh_sort_headers(self):
+        arrow_up = " ▲"
+        arrow_down = " ▼"
+        columns = list(self.tree["columns"]) + ["#0"]
+        for col in columns:
+            text = self.tree.heading(col, option="text")
+            if text.endswith(arrow_up) or text.endswith(arrow_down):
+                text = text[:-2]
+            is_desc = self._sort_state.get(col)
+            if is_desc is None:
+                self.tree.heading(col, text=text)
+            else:
+                self.tree.heading(col, text=text + (arrow_down if is_desc else arrow_up))
+
+    def _on_tree_hover(self, event):
+        row_id = self.tree.identify_row(event.y)
+        if not row_id:
+            self._tree_tooltip.hide()
+            return
+        if self._tree_tooltip.current_iid == row_id:
+            return
+        desc = self._col_descriptions.get(row_id, "")
+        if not desc:
+            self._tree_tooltip.hide()
+            return
+        x = self.tree.winfo_rootx() + 10
+        y = self.tree.winfo_rooty() + event.y + 10
+        self._tree_tooltip.show(desc, x, y, row_id)
+
+    def _on_tree_leave(self, _event):
+        self._tree_tooltip.hide()
 
     def on_column_select(self, event):
         selection = self.tree.selection()
@@ -203,7 +505,13 @@ class MappingEditorView(ttk.Frame):
         header = ttk.Frame(self.right_frame)
         header.pack(fill="x", pady=10)
         ttk.Label(header, text=f"Column: {col_name}", font=("Helvetica", 12, "bold")).pack(side="left")
-        
+        ttk.Button(header, text="Override Validation", command=lambda: self.on_edit_column_validation(col_name)).pack(side="right")
+
+        spec_col = self.spec.get_column(col_name) if self.spec else None
+        if spec_col and spec_col.description:
+            desc = ttk.Label(self.right_frame, text=spec_col.description, wraplength=500, foreground="#444")
+            desc.pack(anchor="w", padx=5, pady=(0, 8))
+
         # If not mapped, button to Initialize
         if col_name not in self.rules_dict:
             btn = ttk.Button(self.right_frame, text="Create Mapping Rule", 
@@ -212,39 +520,1055 @@ class MappingEditorView(ttk.Frame):
             return
 
         rule = self.rules_dict[col_name]
-        
-        # Steps List
-        lf = ttk.LabelFrame(self.right_frame, text="Transformation Steps")
+
+        lf = ttk.LabelFrame(self.right_frame, text="Transformation Configuration")
         lf.pack(fill="both", expand=True, padx=5, pady=5)
-        
-        # Step List Container
-        step_container = ttk.Frame(lf)
-        step_container.pack(fill="both", expand=True)
 
-        for i, step in enumerate(rule.steps):
-            self._render_step(step_container, i, step)
+        config_header = ttk.Frame(lf)
+        config_header.pack(fill="x", padx=8, pady=(8, 4))
+        config_header.columnconfigure(1, weight=1)
+        ttk.Label(config_header, text="Operation Type:").grid(row=0, column=0, sticky="w")
+        self.op_var = tk.StringVar(value=(rule.steps[0].get("op") if rule.steps else ""))
+        op_entry = ttk.Entry(config_header, textvariable=self.op_var, state="readonly", width=24)
+        op_entry.grid(row=0, column=1, sticky="ew", padx=6)
 
-        # Add Step Button
-        ttk.Button(lf, text="Add Step", command=lambda: self.add_step(col_name)).pack(pady=5)
+        def pick_op():
+            op = self._pick_operation_type(current=self.op_var.get() or None)
+            if op is None:
+                return
+            self.op_var.set(op)
+            step = {"op": op}
+            self._set_single_step(col_name, step)
+            self._render_op_config(config_container, col_name, step, spec_col)
 
-    def _render_step(self, parent, index, step_config):
-        frame = ttk.Frame(parent, borderwidth=1, relief="solid")
-        frame.pack(fill="x", pady=2, padx=2)
-        
-        header = ttk.Frame(frame, style="StepHeader.TFrame")
-        header.pack(fill="x")
-        
-        op = step_config.get("op", "unknown")
-        ttk.Label(header, text=f"Step {index+1}: {op}", font=("Helvetica", 10, "bold")).pack(side="left", padx=5)
-        
-        # Delete button
-        ttk.Button(header, text="X", width=2, 
-                   command=lambda: self.delete_step(index)).pack(side="right")
-        
-        # Config Form
-        FormClass = get_form_class(op)
-        form = FormClass(frame, step_config, on_change=self.mark_dirty)
-        form.pack(fill="x", padx=10, pady=5)
+        def clear_op():
+            self.op_var.set("")
+            self._set_single_step(col_name, None)
+            for w in config_container.winfo_children():
+                w.destroy()
+
+        op_entry.bind("<Button-1>", lambda _e: pick_op())
+        ttk.Button(config_header, text="▼", width=2, command=pick_op).grid(row=0, column=2, padx=(0, 6))
+        ttk.Button(config_header, text="Clear", command=clear_op).grid(row=0, column=3)
+
+        # Config container
+        config_container = ttk.Frame(lf)
+        config_container.pack(fill="both", expand=True, padx=8, pady=8)
+
+        if rule.steps:
+            self._render_op_config(config_container, col_name, rule.steps[0], spec_col)
+
+    def _pick_operation_type(self, current: str | None = None) -> str | None:
+        options = [
+            "from_column",
+            "const",
+            "null",
+            "coalesce",
+            "map_values",
+            "concat",
+            "math",
+            "when",
+            "sql",
+            "pandas_expr",
+        ]
+        descriptions = {
+            "from_column": "Use a single input column as the value.",
+            "const": "Use a constant value for all rows.",
+            "null": "Set all values to null.",
+            "coalesce": "Use the first non-null value from a list of columns.",
+            "map_values": "Map source values using a lookup table.",
+            "concat": "Concatenate multiple columns into one string.",
+            "math": "Compute arithmetic across columns/const values.",
+            "when": "Conditional assignment based on a column value.",
+            "sql": "DuckDB SQL expression or query.",
+            "pandas_expr": "Pandas expression evaluated against the DataFrame.",
+        }
+        picker = _OpPicker(self, options, descriptions)
+        return picker.show("Add Operation", current=current)
+
+    def _set_single_step(self, col_name: str, step: dict | None) -> None:
+        if col_name not in self.rules_dict:
+            self.rules_dict[col_name] = MappingRule(target=col_name, steps=[])
+        rule = self.rules_dict[col_name]
+        if step is None:
+            rule.steps.clear()
+        else:
+            rule.steps[:] = [step]
+        self.mark_dirty()
+        self._set_status_for_column(col_name)
+
+    def _update_rule_validation(self, col_name: str, validation: dict | None) -> None:
+        rule = self.rules_dict.get(col_name)
+        if not rule:
+            rule = MappingRule(target=col_name, steps=[])
+        self.rules_dict[col_name] = MappingRule(
+            target=rule.target,
+            steps=rule.steps,
+            description=rule.description,
+            data_type=rule.data_type,
+            validation=validation,
+        )
+        self.mark_dirty()
+
+    def _edit_validation_dialog(self, title: str, initial: dict | None, data_type: str | None = None, allow_remove: bool = False) -> dict | None:
+        dialog = tk.Toplevel(self)
+        dialog.title(title)
+        dialog.geometry("620x700")
+        dialog.resizable(True, True)
+
+        content = ttk.Frame(dialog, padding=10)
+        content.pack(fill="both", expand=True)
+        initial = initial or {}
+        is_defaults = "Defaults" in title
+
+        defaults = {
+            "mode": "permissive",
+            "datetime": {"format": ""},
+            "decimal": {
+                "precision": None,
+                "scale": None,
+                "integer_only": False,
+                "min": None,
+                "max": None,
+            },
+            "string": {
+                "min_length": None,
+                "max_length": None,
+                "allow_empty": True,
+                "trim": True,
+            },
+            "json": {"object_only": False},
+            "allowed_values": {"case_insensitive": False},
+            "nullable": {"allow_nulls": None},
+            "presence": {"enforce": True},
+        }
+
+        def get_nested(src, *keys, default=None):
+            cur = src
+            for k in keys:
+                if not isinstance(cur, dict) or k not in cur:
+                    return default
+                cur = cur[k]
+            return cur
+
+        validators: list[callable] = []
+
+        def add_row(parent, row, label):
+            ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=2)
+
+        def add_star(parent, row):
+            star = ttk.Label(parent, text="*", foreground="red")
+            star.grid(row=row, column=2, sticky="w", padx=(6, 0))
+            star.grid_remove()
+            return star
+
+        def set_star(star, show, reason):
+            if show:
+                star.grid()
+                _set_tooltip(star, reason)
+            else:
+                star.grid_remove()
+
+        def combo_row(parent, row, label, values, initial_value, required=False):
+            add_row(parent, row, label)
+            cb = ttk.Combobox(parent, values=values, state="readonly", width=14)
+            cb.grid(row=row, column=1, sticky="w", pady=2)
+            cb.set(initial_value)
+            star = add_star(parent, row)
+            if required:
+                validators.append(lambda cb=cb, star=star: validate_required(cb.get(), star))
+            return cb, star
+
+        def entry_row(parent, row, label, initial_value, required=False, int_only=False):
+            add_row(parent, row, label)
+            entry = ttk.Entry(parent, width=20)
+            entry.grid(row=row, column=1, sticky="w", pady=2)
+            if initial_value is not None:
+                entry.insert(0, str(initial_value))
+            star = add_star(parent, row)
+            if required or int_only:
+                validators.append(lambda e=entry, s=star, req=required, io=int_only: validate_entry(e, s, req, io))
+            return entry, star
+
+        def check_row(parent, row, label, initial_value):
+            add_row(parent, row, label)
+            var = tk.BooleanVar(value=bool(initial_value))
+            cb = ttk.Checkbutton(parent, variable=var)
+            cb.grid(row=row, column=1, sticky="w", pady=2)
+            return var
+
+        def validate_required(value, star):
+            show = not bool(str(value).strip())
+            set_star(star, show, "Please select a value.")
+            return not show
+
+        def validate_entry(entry, star, required, int_only):
+            raw = entry.get().strip()
+            if required and not raw:
+                set_star(star, True, "Required.")
+                return False
+            if raw and int_only:
+                try:
+                    int(raw)
+                except ValueError:
+                    set_star(star, True, "Must be an integer.")
+                    return False
+            set_star(star, False, "")
+            return True
+
+        # Common fields
+        common = ttk.LabelFrame(content, text="Common")
+        common.pack(fill="x", pady=6)
+        common.columnconfigure(1, weight=1)
+        mode_init = initial.get("mode") or (defaults["mode"] if is_defaults else "")
+        mode_cb, mode_star = combo_row(common, 0, "Mode", ["permissive", "strict"], mode_init, required=True)
+
+        nullable_init = get_nested(initial, "nullable", "allow_nulls", default=(defaults["nullable"]["allow_nulls"] if is_defaults else None))
+        allowed_init = get_nested(initial, "allowed_values", "case_insensitive", default=(defaults["allowed_values"]["case_insensitive"] if is_defaults else None))
+        presence_init = get_nested(initial, "presence", "enforce", default=(defaults["presence"]["enforce"] if is_defaults else None))
+        nullable_cb, _ = combo_row(
+            common,
+            1,
+            "Nullable override",
+            ["<follow spec>", "true", "false"],
+            "<follow spec>" if nullable_init is None else ("true" if nullable_init else "false"),
+            required=True,
+        )
+        allowed_ci_var = check_row(common, 2, "Allowed values case-insensitive", allowed_init if allowed_init is not None else defaults["allowed_values"]["case_insensitive"])
+        presence_var = check_row(common, 3, "Presence enforce", presence_init if presence_init is not None else defaults["presence"]["enforce"])
+
+        dtype = (data_type or "").strip().lower()
+        show_all = not dtype
+
+        # Datetime
+        dt_frame = None
+        dt_format_entry = None
+        if show_all or dtype in {"datetime", "date/time"}:
+            dt_frame = ttk.LabelFrame(content, text="Datetime")
+            dt_frame.pack(fill="x", pady=6)
+            dt_frame.columnconfigure(1, weight=1)
+            dt_format_entry, dt_star = entry_row(
+                dt_frame,
+                0,
+                "Format",
+                get_nested(initial, "datetime", "format", default=(defaults["datetime"]["format"] if is_defaults else "")),
+                required=False,
+            )
+
+        # Decimal
+        dec_frame = None
+        dec_prec_entry = dec_scale_entry = dec_min_entry = dec_max_entry = None
+        dec_int_var = None
+        if show_all or dtype == "decimal":
+            dec_frame = ttk.LabelFrame(content, text="Decimal")
+            dec_frame.pack(fill="x", pady=6)
+            dec_frame.columnconfigure(1, weight=1)
+            dec_prec_entry, dec_prec_star = entry_row(dec_frame, 0, "Precision", get_nested(initial, "decimal", "precision", default=(defaults["decimal"]["precision"] if is_defaults else None)), int_only=True)
+            dec_scale_entry, dec_scale_star = entry_row(dec_frame, 1, "Scale", get_nested(initial, "decimal", "scale", default=(defaults["decimal"]["scale"] if is_defaults else None)), int_only=True)
+            dec_min_entry, dec_min_star = entry_row(dec_frame, 2, "Min", get_nested(initial, "decimal", "min", default=(defaults["decimal"]["min"] if is_defaults else None)), int_only=True)
+            dec_max_entry, dec_max_star = entry_row(dec_frame, 3, "Max", get_nested(initial, "decimal", "max", default=(defaults["decimal"]["max"] if is_defaults else None)), int_only=True)
+            dec_int_val = get_nested(initial, "decimal", "integer_only", default=(defaults["decimal"]["integer_only"] if is_defaults else None))
+            dec_int_var = check_row(dec_frame, 4, "Integer only", dec_int_val if dec_int_val is not None else defaults["decimal"]["integer_only"])
+
+        # String
+        str_frame = None
+        str_min_entry = str_max_entry = None
+        str_allow_empty_cb = str_trim_cb = None
+        if show_all or dtype == "string":
+            str_frame = ttk.LabelFrame(content, text="String")
+            str_frame.pack(fill="x", pady=6)
+            str_frame.columnconfigure(1, weight=1)
+            str_min_entry, str_min_star = entry_row(str_frame, 0, "Min length", get_nested(initial, "string", "min_length", default=(defaults["string"]["min_length"] if is_defaults else None)), int_only=True)
+            str_max_entry, str_max_star = entry_row(str_frame, 1, "Max length", get_nested(initial, "string", "max_length", default=(defaults["string"]["max_length"] if is_defaults else None)), int_only=True)
+            allow_empty_val = get_nested(initial, "string", "allow_empty", default=(defaults["string"]["allow_empty"] if is_defaults else None))
+            trim_val = get_nested(initial, "string", "trim", default=(defaults["string"]["trim"] if is_defaults else None))
+            str_allow_empty_var = check_row(str_frame, 2, "Allow empty", allow_empty_val if allow_empty_val is not None else defaults["string"]["allow_empty"])
+            str_trim_var = check_row(str_frame, 3, "Trim", trim_val if trim_val is not None else defaults["string"]["trim"])
+
+        # JSON
+        json_frame = None
+        json_obj_var = None
+        if show_all or dtype == "json":
+            json_frame = ttk.LabelFrame(content, text="JSON")
+            json_frame.pack(fill="x", pady=6)
+            json_frame.columnconfigure(1, weight=1)
+            obj_val = get_nested(initial, "json", "object_only", default=(defaults["json"]["object_only"] if is_defaults else None))
+            json_obj_var = check_row(json_frame, 0, "Object only", obj_val if obj_val is not None else defaults["json"]["object_only"])
+
+        result = [None]
+
+        def parse_int(entry):
+            raw = entry.get().strip()
+            if not raw:
+                return None
+            try:
+                return int(raw)
+            except ValueError:
+                return None
+
+        def validate_datetime_format(value: str) -> bool:
+            if not value:
+                return True
+            if "%" not in value:
+                return False
+            required = ("%Y", "%m", "%d")
+            if not all(tok in value for tok in required):
+                return False
+            try:
+                datetime.now(timezone.utc).strftime(value)
+            except Exception:
+                return False
+            return True
+
+        def validate_all():
+            ok = True
+            for fn in validators:
+                if not fn():
+                    ok = False
+            # datetime format
+            if dt_format_entry is not None:
+                valid = validate_datetime_format(dt_format_entry.get().strip())
+                if not valid:
+                    set_star(dt_star, True, "Invalid datetime format. Use strftime directives (ISO-like).")
+                    ok = False
+                else:
+                    set_star(dt_star, False, "")
+            # min/max check
+            if dec_min_entry is not None and dec_max_entry is not None:
+                min_val = parse_int(dec_min_entry)
+                max_val = parse_int(dec_max_entry)
+                if min_val is not None and min_val < 0:
+                    set_star(dec_min_star, True, "Min must be >= 0.")
+                    ok = False
+                if max_val is not None and max_val < 0:
+                    set_star(dec_max_star, True, "Max must be >= 0.")
+                    ok = False
+                if min_val is not None and max_val is not None and max_val < min_val:
+                    set_star(dec_min_star, True, "Min must be <= Max.")
+                    set_star(dec_max_star, True, "Max must be >= Min.")
+                    ok = False
+            # precision/scale check
+            if dec_prec_entry is not None and dec_scale_entry is not None:
+                prec = parse_int(dec_prec_entry)
+                scale = parse_int(dec_scale_entry)
+                if prec is not None and prec < 0:
+                    set_star(dec_prec_star, True, "Precision must be >= 0.")
+                    ok = False
+                if scale is not None and scale < 0:
+                    set_star(dec_scale_star, True, "Scale must be >= 0.")
+                    ok = False
+                if prec is not None and scale is not None and scale > prec:
+                    set_star(dec_scale_star, True, "Scale must be <= Precision.")
+                    ok = False
+            return ok
+
+        # duplicate validate_all removed
+
+        def on_ok():
+            if not validate_all():
+                messagebox.showwarning("Invalid", "Please fix validation errors before continuing.", parent=dialog)
+                return
+            out: dict = {}
+            mode = mode_cb.get().strip()
+            if mode:
+                out["mode"] = mode
+
+            nullable_val = nullable_cb.get().strip().lower()
+            if nullable_val == "true":
+                out.setdefault("nullable", {})["allow_nulls"] = True
+            elif nullable_val == "false":
+                out.setdefault("nullable", {})["allow_nulls"] = False
+
+            out.setdefault("allowed_values", {})["case_insensitive"] = bool(allowed_ci_var.get())
+
+            out.setdefault("presence", {})["enforce"] = bool(presence_var.get())
+
+            if dt_format_entry is not None:
+                dt_fmt = dt_format_entry.get().strip()
+                if dt_fmt:
+                    out.setdefault("datetime", {})["format"] = dt_fmt
+
+            if dec_prec_entry is not None:
+                prec = parse_int(dec_prec_entry)
+                if prec is not None:
+                    out.setdefault("decimal", {})["precision"] = prec
+            if dec_scale_entry is not None:
+                scale = parse_int(dec_scale_entry)
+                if scale is not None:
+                    out.setdefault("decimal", {})["scale"] = scale
+            if dec_min_entry is not None:
+                min_val = parse_int(dec_min_entry)
+                if min_val is not None:
+                    out.setdefault("decimal", {})["min"] = min_val
+            if dec_max_entry is not None:
+                max_val = parse_int(dec_max_entry)
+                if max_val is not None:
+                    out.setdefault("decimal", {})["max"] = max_val
+            if dec_int_var is not None:
+                out.setdefault("decimal", {})["integer_only"] = bool(dec_int_var.get())
+
+            if str_min_entry is not None:
+                smin = parse_int(str_min_entry)
+                if smin is not None:
+                    out.setdefault("string", {})["min_length"] = smin
+            if str_max_entry is not None:
+                smax = parse_int(str_max_entry)
+                if smax is not None:
+                    out.setdefault("string", {})["max_length"] = smax
+            if str_allow_empty_var is not None:
+                out.setdefault("string", {})["allow_empty"] = bool(str_allow_empty_var.get())
+            if str_trim_var is not None:
+                out.setdefault("string", {})["trim"] = bool(str_trim_var.get())
+
+            if json_obj_var is not None:
+                out.setdefault("json", {})["object_only"] = bool(json_obj_var.get())
+
+            result[0] = out
+            dialog.destroy()
+
+        def on_cancel():
+            dialog.destroy()
+
+        btns = ttk.Frame(content)
+        btns.pack(fill="x", pady=(12, 0))
+        if allow_remove:
+            ttk.Button(btns, text="Remove Override", command=lambda: set_remove()).pack(side="left")
+        ttk.Button(btns, text="Cancel", command=on_cancel).pack(side="right")
+        ttk.Button(btns, text="OK", command=on_ok).pack(side="right", padx=6)
+
+        def set_remove():
+            result[0] = "__REMOVE__"
+            dialog.destroy()
+
+        dialog.transient(self)
+        dialog.grab_set()
+        self.wait_window(dialog)
+        return result[0]
+
+    def on_edit_validation_defaults(self):
+        updated = self._edit_validation_dialog("Validation Defaults", self.validation_defaults)
+        if updated is None:
+            return
+        self.validation_defaults = updated
+        self.mark_dirty()
+
+    def on_edit_column_validation(self, col_name: str):
+        rule = self.rules_dict.get(col_name)
+        current = rule.validation if rule else None
+        data_type = None
+        if self.spec:
+            spec_col = self.spec.get_column(col_name)
+            if spec_col and spec_col.data_type:
+                data_type = spec_col.data_type
+        base = self.validation_defaults or default_validation_settings()
+        merged = _deep_merge(base, current or {})
+        updated = self._edit_validation_dialog(
+            f"Validation Override: {col_name}",
+            merged,
+            data_type=data_type,
+            allow_remove=True,
+        )
+        if updated is None:
+            return
+        if updated == "__REMOVE__":
+            self._update_rule_validation(col_name, None)
+            return
+        diff = _deep_diff(base, updated or {})
+        self._update_rule_validation(col_name, diff or None)
+
+    def _is_step_valid(self, col_name: str, step: dict | None, spec_col) -> bool:
+        if not step or not isinstance(step, dict):
+            return False
+        op = step.get("op")
+        if not op:
+            return False
+
+        if op == "from_column":
+            return bool(str(step.get("column", "")).strip())
+
+        if op == "const":
+            allowed = list(spec_col.allowed_values) if spec_col and spec_col.allowed_values else []
+            allow_nullable_string = bool(
+                spec_col
+                and spec_col.data_type
+                and spec_col.data_type.strip().lower() == "string"
+                and spec_col.allows_nulls
+            )
+            value = step.get("value")
+            if allowed:
+                if value is None:
+                    return allow_nullable_string
+                return str(value) in allowed
+            if allow_nullable_string:
+                return True
+            return bool(str(value or "").strip())
+
+        if op == "null":
+            return True
+
+        if op == "coalesce":
+            return bool(step.get("columns"))
+
+        if op == "map_values":
+            mapping = step.get("mapping") or {}
+            if not bool(str(step.get("column", "")).strip()) or not mapping:
+                return False
+            for k, v in mapping.items():
+                if k == v:
+                    return False
+            return True
+
+        if op == "concat":
+            return bool(step.get("columns"))
+
+        if op == "math":
+            operator = step.get("operator")
+            operands = step.get("operands")
+            if operator not in {"add", "sub", "mul", "div"}:
+                return False
+            if not isinstance(operands, list) or len(operands) != 2:
+                return False
+            for operand in operands:
+                if operand.get("current") is True:
+                    continue
+                if "column" in operand:
+                    if not str(operand.get("column", "")).strip():
+                        return False
+                    continue
+                if "const" in operand:
+                    if not str(operand.get("const", "")).strip():
+                        return False
+                    continue
+                return False
+            return True
+
+        if op == "when":
+            return (
+                bool(str(step.get("column", "")).strip())
+                and bool(str(step.get("value", "")).strip())
+                and bool(str(step.get("then", "")).strip())
+            )
+
+        if op == "pandas_expr":
+            return bool(str(step.get("expr", "")).strip())
+
+        if op == "sql":
+            return bool(str(step.get("expr") or step.get("query") or "").strip())
+
+        return False
+
+    def _render_op_config(self, parent, col_name: str, step: dict, spec_col) -> None:
+        for w in parent.winfo_children():
+            w.destroy()
+
+        op = step.get("op")
+        if not op:
+            return
+
+        def add_label(text: str, tooltip: str | None = None, required: bool = False):
+            row = ttk.Frame(parent)
+            row.pack(anchor="w", pady=(4, 0), fill="x")
+            lbl = ttk.Label(row, text=text)
+            lbl.pack(side="left")
+            star = None
+            if required:
+                star = _create_star(row, "Required", side="left", padx=(4, 0))
+            if tooltip:
+                _set_tooltip(lbl, tooltip)
+            return lbl, star, row
+
+        def add_entry(key: str, tooltip: str, multiline: bool = False, width: int = 40, required: bool = False, label_text: str | None = None):
+            _, label_star, _ = add_label(label_text or f"{key}:", tooltip, required=required)
+            if multiline:
+                frame = ttk.Frame(parent)
+                frame.pack(fill="both", expand=True, pady=(0, 6))
+                text = tk.Text(frame, height=4, width=width)
+                yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+                text.configure(yscrollcommand=yscroll.set)
+                text.pack(side="left", fill="both", expand=True)
+                yscroll.pack(side="right", fill="y")
+                input_star = _create_star(frame, "Required", side="left", padx=(6, 0)) if required else None
+                if key in step and step[key] is not None:
+                    text.insert("1.0", str(step[key]))
+
+                def on_change(_event=None):
+                    val = text.get("1.0", "end-1c")
+                    step[key] = val
+                    if required:
+                        show = not bool(val.strip())
+                        _set_star_visible(label_star, show, "Required")
+                        _set_star_visible(input_star, show, "Required")
+                    self.mark_dirty()
+                    self._set_status_for_column(col_name)
+                text.bind("<KeyRelease>", on_change)
+                _set_tooltip(text, tooltip)
+                on_change()
+                return text
+            row = ttk.Frame(parent)
+            row.pack(fill="x", pady=(0, 6))
+            entry = ttk.Entry(row, width=width)
+            entry.pack(side="left", fill="x", expand=True)
+            input_star = _create_star(row, "Required", side="left", padx=(6, 0)) if required else None
+            if key in step and step[key] is not None:
+                entry.insert(0, str(step[key]))
+
+            def on_change(_event=None):
+                val = entry.get()
+                step[key] = val
+                if required:
+                    show = not bool(val.strip())
+                    _set_star_visible(label_star, show, "Required")
+                    _set_star_visible(input_star, show, "Required")
+                self.mark_dirty()
+                self._set_status_for_column(col_name)
+            entry.bind("<KeyRelease>", on_change)
+            _set_tooltip(entry, tooltip)
+            on_change()
+            return entry
+
+        def add_columns_field(key: str, tooltip: str, required: bool = False):
+            _, label_star, _ = add_label(f"{key}:", tooltip, required=required)
+            frame = ttk.Frame(parent)
+            frame.pack(fill="x", pady=(0, 6))
+            listbox = tk.Listbox(frame, height=4)
+            listbox.pack(side="left", fill="both", expand=True)
+            _set_tooltip(listbox, tooltip)
+            btns = ttk.Frame(frame)
+            btns.pack(side="left", padx=6, fill="y")
+
+            entry = ttk.Entry(btns, width=16)
+            entry.pack(pady=(0, 4))
+            _set_tooltip(entry, "Column name to add.")
+            ttk.Button(btns, text="+", width=3, command=lambda: add_item()).pack(pady=(0, 4))
+            ttk.Button(btns, text="-", width=3, command=lambda: remove_item()).pack()
+            ttk.Button(btns, text="↑", width=3, command=lambda: move_item(-1)).pack(pady=(6, 0))
+            ttk.Button(btns, text="↓", width=3, command=lambda: move_item(1)).pack()
+
+            input_star = _create_star(frame, "Required", side="left", padx=(6, 0)) if required else None
+
+            def sync_list():
+                cols = list(listbox.get(0, "end"))
+                step[key] = cols
+                if required:
+                    show = not bool(cols)
+                    _set_star_visible(label_star, show, "Required")
+                    _set_star_visible(input_star, show, "Required")
+                self.mark_dirty()
+                self._set_status_for_column(col_name)
+
+            def add_item():
+                val = entry.get().strip()
+                if not val:
+                    return
+                existing = set(listbox.get(0, "end"))
+                if val in existing:
+                    return
+                listbox.insert("end", val)
+                entry.delete(0, "end")
+                sync_list()
+
+            def remove_item():
+                sel = listbox.curselection()
+                if not sel:
+                    return
+                listbox.delete(sel[0])
+                sync_list()
+
+            def move_item(delta: int):
+                sel = listbox.curselection()
+                if not sel:
+                    return
+                idx = sel[0]
+                new_idx = idx + delta
+                if new_idx < 0 or new_idx >= listbox.size():
+                    return
+                val = listbox.get(idx)
+                listbox.delete(idx)
+                listbox.insert(new_idx, val)
+                listbox.selection_set(new_idx)
+                sync_list()
+
+            if key in step and isinstance(step[key], list):
+                for col in step[key]:
+                    listbox.insert("end", col)
+            sync_list()
+            return listbox
+
+        if op == "from_column":
+            add_entry("column", "Input column name to use as the value.", required=True)
+            return
+
+        if op == "const":
+            allowed = list(spec_col.allowed_values) if spec_col and spec_col.allowed_values else []
+            data_type = spec_col.data_type if spec_col and spec_col.data_type else "-"
+            value_format = spec_col.value_format if spec_col and spec_col.value_format else None
+            label_hint = f"value (Type: {data_type}"
+            if value_format:
+                label_hint += f", Format: {value_format}"
+            label_hint += "):"
+            allow_nullable_string = bool(
+                spec_col
+                and spec_col.data_type
+                and spec_col.data_type.strip().lower() == "string"
+                and spec_col.allows_nulls
+            )
+            if allowed:
+                if spec_col and spec_col.allows_nulls:
+                    allowed = allowed + ["null"]
+                _, label_star, _ = add_label(label_hint, "Constant value (choose from allowed values).", required=not allow_nullable_string)
+                row = ttk.Frame(parent)
+                row.pack(fill="x", pady=(0, 6))
+                cb = ttk.Combobox(row, values=allowed, state="readonly")
+                cb.pack(side="left", fill="x", expand=True)
+                input_star = None
+                if not allow_nullable_string:
+                    input_star = _create_star(row, "Required", side="left", padx=(6, 0))
+                cur = step.get("value")
+                if cur is None:
+                    cb.set("null" if "null" in allowed else allowed[0])
+                else:
+                    cb.set(str(cur))
+
+                def on_select(_event=None):
+                    val = cb.get()
+                    step["value"] = None if val == "null" else val
+                    if not allow_nullable_string:
+                        show = not bool(val)
+                        _set_star_visible(label_star, show, "Required")
+                        _set_star_visible(input_star, show, "Required")
+                    self.mark_dirty()
+                    self._set_status_for_column(col_name)
+                cb.bind("<<ComboboxSelected>>", on_select)
+                tip = _WidgetTooltip(cb)
+                cb.bind("<Enter>", lambda _e: tip.show("Constant value (choose from allowed values)."))
+                cb.bind("<Leave>", lambda _e: tip.hide())
+                on_select()
+            else:
+                add_entry(
+                    "value",
+                    "Constant value to use for all rows.",
+                    required=not allow_nullable_string,
+                    label_text=label_hint,
+                )
+            return
+
+        if op == "null":
+            add_label("No configuration needed.", "All rows will be null.")
+            return
+
+        if op == "coalesce":
+            add_columns_field("columns", "List of columns to coalesce (first non-null wins).", required=True)
+            return
+
+        if op == "map_values":
+            add_entry("column", "Source column name (required for single-step).", required=True)
+            _, label_star, _ = add_label("mapping:", "Each row maps a source value to a target value.", required=True)
+            map_frame = ttk.Frame(parent)
+            map_frame.pack(fill="x", pady=(0, 6))
+            rows_frame = ttk.Frame(map_frame)
+            rows_frame.pack(side="left", fill="both", expand=True)
+            input_star = _create_star(map_frame, "Required", side="left", padx=(6, 0))
+
+            def collect_mapping():
+                mapping: dict = {}
+                valid = True
+                seen = set()
+                reason = "Required"
+                for child in rows_frame.winfo_children():
+                    if not isinstance(child, ttk.Frame):
+                        continue
+                    entries = child.winfo_children()
+                    if len(entries) < 2:
+                        continue
+                    src = entries[0].get().strip()
+                    dst = entries[2].get().strip()
+                    if src:
+                        if src in seen:
+                            valid = False
+                            reason = "Duplicate source values are not allowed."
+                        seen.add(src)
+                        if src == dst and src != "":
+                            valid = False
+                            reason = "Source and target must not be the same."
+                        mapping[src] = dst
+                step["mapping"] = mapping
+                show = not mapping or not valid
+                _set_star_visible(label_star, show, reason)
+                _set_star_visible(input_star, show, reason)
+                self.mark_dirty()
+                self._set_status_for_column(col_name)
+
+            def add_row(src_val: str = "", dst_val: str = ""):
+                row = ttk.Frame(rows_frame)
+                row.pack(fill="x", pady=2)
+                src = ttk.Entry(row, width=18)
+                src.pack(side="left")
+                ttk.Label(row, text="→").pack(side="left", padx=4)
+                dst = ttk.Entry(row, width=18)
+                dst.pack(side="left")
+                btn = ttk.Button(row, text="-", width=2, command=lambda: remove_row(row))
+                btn.pack(side="left", padx=(6, 0))
+                src.insert(0, src_val)
+                dst.insert(0, dst_val)
+
+                src.bind("<KeyRelease>", lambda _e: collect_mapping())
+                dst.bind("<KeyRelease>", lambda _e: collect_mapping())
+                tip_src = _WidgetTooltip(src)
+                tip_dst = _WidgetTooltip(dst)
+                src.bind("<Enter>", lambda _e: tip_src.show("Source value to match."))
+                src.bind("<Leave>", lambda _e: tip_src.hide())
+                dst.bind("<Enter>", lambda _e: tip_dst.show("Target value to output."))
+                dst.bind("<Leave>", lambda _e: tip_dst.hide())
+
+            def remove_row(row):
+                row.destroy()
+                collect_mapping()
+            ttk.Button(map_frame, text="+", width=3, command=lambda: add_row()).pack(side="left", padx=6)
+
+            if isinstance(step.get("mapping"), dict) and step["mapping"]:
+                for k, v in step["mapping"].items():
+                    add_row(str(k), str(v))
+            else:
+                add_row()
+            collect_mapping()
+
+            add_entry("default", "Default value if no mapping match.")
+            return
+
+        if op == "concat":
+            add_columns_field("columns", "List of columns to join (in order).", required=True)
+            add_entry("sep", "Separator string to insert between values.")
+            return
+
+        if op == "math":
+            _, label_star, _ = add_label("expression:", "Left operand, operator, right operand", required=True)
+            row = ttk.Frame(parent)
+            row.pack(fill="x", pady=(0, 6))
+
+            left_type = tk.StringVar(value="column")
+            left_val = tk.StringVar(value="")
+            op_var = tk.StringVar(value=step.get("operator") or "")
+            right_type = tk.StringVar(value="const")
+            right_val = tk.StringVar(value="")
+
+            if isinstance(step.get("operands"), list) and len(step["operands"]) >= 2:
+                def _load_operand(var_type, var_val, operand):
+                    if "column" in operand:
+                        var_type.set("column")
+                        var_val.set(str(operand.get("column") or ""))
+                    elif "const" in operand:
+                        var_type.set("const")
+                        var_val.set(str(operand.get("const") or ""))
+
+                _load_operand(left_type, left_val, step["operands"][0])
+                _load_operand(right_type, right_val, step["operands"][1])
+
+            left_type_cb = ttk.Combobox(row, values=["column", "const"], textvariable=left_type, state="readonly", width=8)
+            left_type_cb.pack(side="left")
+            left_entry = ttk.Entry(row, textvariable=left_val, width=18)
+            left_entry.pack(side="left", padx=(4, 8))
+
+            op_cb = ttk.Combobox(row, values=["+", "-", "x", "/"], textvariable=op_var, state="readonly", width=5)
+            op_cb.pack(side="left", padx=(0, 8))
+
+            right_type_cb = ttk.Combobox(row, values=["column", "const"], textvariable=right_type, state="readonly", width=8)
+            right_type_cb.pack(side="left")
+            right_entry = ttk.Entry(row, textvariable=right_val, width=18)
+            right_entry.pack(side="left", padx=(4, 0))
+
+            tip_left_type = _WidgetTooltip(left_type_cb)
+            tip_left_val = _WidgetTooltip(left_entry)
+            tip_op = _WidgetTooltip(op_cb)
+            tip_right_type = _WidgetTooltip(right_type_cb)
+            tip_right_val = _WidgetTooltip(right_entry)
+            left_type_cb.bind("<Enter>", lambda _e: tip_left_type.show("Left operand type (column or const)."))
+            left_type_cb.bind("<Leave>", lambda _e: tip_left_type.hide())
+            left_entry.bind("<Enter>", lambda _e: tip_left_val.show("Left operand value."))
+            left_entry.bind("<Leave>", lambda _e: tip_left_val.hide())
+            op_cb.bind("<Enter>", lambda _e: tip_op.show("Operator."))
+            op_cb.bind("<Leave>", lambda _e: tip_op.hide())
+            right_type_cb.bind("<Enter>", lambda _e: tip_right_type.show("Right operand type (column or const)."))
+            right_type_cb.bind("<Leave>", lambda _e: tip_right_type.hide())
+            right_entry.bind("<Enter>", lambda _e: tip_right_val.show("Right operand value."))
+            right_entry.bind("<Leave>", lambda _e: tip_right_val.hide())
+
+            hint = ttk.Label(parent, text="add = +, sub = -, mul = x, div = /", foreground="#666")
+            hint.pack(anchor="w", pady=(0, 6))
+
+            def update_math():
+                def build_operand(t, v):
+                    if t == "column":
+                        return {"column": v.strip()}
+                    return {"const": v.strip()}
+
+                operands = [build_operand(left_type.get(), left_val.get()), build_operand(right_type.get(), right_val.get())]
+                op_map = {"+": "add", "-": "sub", "x": "mul", "/": "div"}
+                step["operator"] = op_map.get(op_var.get(), "")
+                step["operands"] = operands
+
+                valid = self._is_step_valid(col_name, step, spec_col)
+                if label_star:
+                    label_star.pack_forget() if valid else label_star.pack(side="left", padx=(4, 0))
+                self.mark_dirty()
+                self._set_status_for_column(col_name)
+
+                left_entry.configure(state="normal")
+                right_entry.configure(state="normal")
+
+            left_type_cb.bind("<<ComboboxSelected>>", lambda _e: update_math())
+            right_type_cb.bind("<<ComboboxSelected>>", lambda _e: update_math())
+            op_cb.bind("<<ComboboxSelected>>", lambda _e: update_math())
+            left_entry.bind("<KeyRelease>", lambda _e: update_math())
+            right_entry.bind("<KeyRelease>", lambda _e: update_math())
+            update_math()
+            return
+
+        if op == "when":
+            cond = ttk.Frame(parent)
+            cond.pack(fill="x", pady=(0, 6))
+            ttk.Label(cond, text="if column").pack(side="left")
+            col_entry = ttk.Entry(cond, width=20)
+            col_entry.pack(side="left", padx=4)
+            ttk.Label(cond, text="==").pack(side="left")
+            val_entry = ttk.Entry(cond, width=20)
+            val_entry.pack(side="left", padx=4)
+
+            then_row = ttk.Frame(parent)
+            then_row.pack(fill="x", pady=(0, 6))
+            ttk.Label(then_row, text="Then:").pack(side="left")
+            then_entry = ttk.Entry(then_row, width=30)
+            then_entry.pack(side="left", padx=4)
+
+            else_row = ttk.Frame(parent)
+            else_row.pack(fill="x", pady=(0, 6))
+            ttk.Label(else_row, text="Else:").pack(side="left")
+            else_entry = ttk.Entry(else_row, width=30)
+            else_entry.pack(side="left", padx=4)
+
+            tip_col = _WidgetTooltip(col_entry)
+            tip_val = _WidgetTooltip(val_entry)
+            tip_then = _WidgetTooltip(then_entry)
+            tip_else = _WidgetTooltip(else_entry)
+            col_entry.bind("<Enter>", lambda _e: tip_col.show("Column name to test."))
+            col_entry.bind("<Leave>", lambda _e: tip_col.hide())
+            val_entry.bind("<Enter>", lambda _e: tip_val.show("Value to compare against."))
+            val_entry.bind("<Leave>", lambda _e: tip_val.hide())
+            then_entry.bind("<Enter>", lambda _e: tip_then.show("Value when condition matches."))
+            then_entry.bind("<Leave>", lambda _e: tip_then.hide())
+            else_entry.bind("<Enter>", lambda _e: tip_else.show("Value when condition does not match."))
+            else_entry.bind("<Leave>", lambda _e: tip_else.hide())
+
+            if step.get("column"):
+                col_entry.insert(0, str(step.get("column")))
+            if step.get("value") is not None:
+                val_entry.insert(0, str(step.get("value")))
+            if step.get("then") is not None:
+                then_entry.insert(0, str(step.get("then")))
+            if step.get("else") is not None:
+                else_entry.insert(0, str(step.get("else")))
+
+            def on_change(_event=None):
+                step["column"] = col_entry.get()
+                step["value"] = val_entry.get()
+                step["then"] = then_entry.get()
+                step["else"] = else_entry.get()
+                self.mark_dirty()
+                self._set_status_for_column(col_name)
+
+            col_entry.bind("<KeyRelease>", on_change)
+            val_entry.bind("<KeyRelease>", on_change)
+            then_entry.bind("<KeyRelease>", on_change)
+            else_entry.bind("<KeyRelease>", on_change)
+            on_change()
+            return
+
+        if op == "pandas_expr":
+            _, label_star, _ = add_label("expr:", "Pandas expression (uses df and current).", required=True)
+            frame = ttk.Frame(parent)
+            frame.pack(fill="both", expand=True, pady=(0, 6))
+            text = tk.Text(frame, height=6, wrap="none")
+            yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+            text.configure(yscrollcommand=yscroll.set)
+            text.pack(side="left", fill="both", expand=True)
+            yscroll.pack(side="right", fill="y")
+            input_star = _create_star(frame, "Required", side="left", padx=(6, 0))
+            if step.get("expr"):
+                text.insert("1.0", step.get("expr"))
+
+            def on_change(_event=None):
+                val = text.get("1.0", "end-1c")
+                step["expr"] = val
+                show = not bool(val.strip())
+                _set_star_visible(label_star, show, "Required")
+                _set_star_visible(input_star, show, "Required")
+                self.mark_dirty()
+                self._set_status_for_column(col_name)
+            text.bind("<KeyRelease>", on_change)
+            _set_tooltip(text, "Pandas expression (uses df and current).")
+            on_change()
+            return
+
+        if op == "sql":
+            add_label("mode:", "Expression uses SELECT <expr> AS result FROM src. Query must start with SELECT/WITH.")
+            mode_var = tk.StringVar(value="expr" if "expr" in step else "query" if "query" in step else "expr")
+            mode_frame = ttk.Frame(parent)
+            mode_frame.pack(anchor="w", pady=(0, 4))
+            ttk.Radiobutton(mode_frame, text="Expression", variable=mode_var, value="expr").pack(side="left")
+            ttk.Radiobutton(mode_frame, text="Full Query", variable=mode_var, value="query").pack(side="left", padx=8)
+
+            _, label_star, _ = add_label("sql:", "SQL expression or query based on selected mode.", required=True)
+            frame = ttk.Frame(parent)
+            frame.pack(fill="both", expand=True, pady=(0, 6))
+            text = tk.Text(frame, height=6, wrap="none")
+            yscroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+            text.configure(yscrollcommand=yscroll.set)
+            text.pack(side="left", fill="both", expand=True)
+            yscroll.pack(side="right", fill="y")
+            input_star = _create_star(frame, "Required", side="left", padx=(6, 0))
+            if mode_var.get() == "expr":
+                text.insert("1.0", step.get("expr", ""))
+            else:
+                text.insert("1.0", step.get("query", ""))
+
+            def on_sql_change(_event=None):
+                content = text.get("1.0", "end-1c")
+                step.pop("expr", None)
+                step.pop("query", None)
+                step[mode_var.get()] = content
+                show = not bool(content.strip())
+                _set_star_visible(label_star, show, "Required")
+                _set_star_visible(input_star, show, "Required")
+                self.mark_dirty()
+                self._set_status_for_column(col_name)
+
+            def on_mode_change():
+                content = text.get("1.0", "end-1c")
+                text.delete("1.0", "end")
+                text.insert("1.0", content)
+                on_sql_change()
+
+            text.bind("<KeyRelease>", on_sql_change)
+            mode_var.trace_add("write", lambda *_: on_mode_change())
+            _set_tooltip(text, "SQL expression or query based on selected mode.")
+            on_sql_change()
+            return
+
+    def _status_for_column(self, col_name: str) -> tuple[str, tuple[str, ...]]:
+        spec_col = self.spec.get_column(col_name) if self.spec else None
+        step = None
+        if col_name in self.rules_dict and getattr(self.rules_dict[col_name], "steps", []):
+            step = self.rules_dict[col_name].steps[0]
+        is_valid = self._is_step_valid(col_name, step, spec_col)
+        status = "Mapped" if is_valid else "-"
+        if spec_col and spec_col.feature_level.lower() == "mandatory" and not is_valid:
+            return "TBD", ("tbd",)
+        return status, ()
+
+    def _set_status_for_column(self, col_name: str) -> None:
+        status, tags = self._status_for_column(col_name)
+        if self.tree.exists(col_name):
+            self.tree.set(col_name, "status", status)
+            self.tree.item(col_name, tags=tags)
 
     def create_rule(self, col_name):
         # Create a new MappingRule
@@ -254,25 +1578,8 @@ class MappingEditorView(ttk.Frame):
         # However, to be safe and clean, let's create a new one.
         self.rules_dict[col_name] = MappingRule(target=col_name, steps=[])
         self.mark_dirty()
-        self.tree.set(col_name, "status", "Mapped")
+        self._set_status_for_column(col_name)
         self._show_column_details(col_name)
-
-    def add_step(self, col_name):
-        # Prompt for Op
-        ops = ["from_column", "const", "sql", "cast", "null", "concat"] # etc
-        op = simpledialog.askstring("Add Step", f"Enter operation: {', '.join(ops)}", parent=self)
-        if op and op in ops:
-            step = {"op": op}
-            # List is mutable, even in frozen dataclass if initialized
-            self.rules_dict[col_name].steps.append(step)
-            self.mark_dirty()
-            self._show_column_details(col_name)
-
-    def delete_step(self, index):
-        if self.current_column:
-            self.rules_dict[self.current_column].steps.pop(index)
-            self.mark_dirty()
-            self._show_column_details(self.current_column)
 
     def mark_dirty(self):
         # TODO: Enable save button state or * indicator
@@ -286,7 +1593,15 @@ class MappingEditorView(ttk.Frame):
             if name not in self.rules_dict:
                 self.create_rule(name)
                 # Add to tree
-                self.tree.insert("", "end", iid=name, text=name, values=("Mapped",))
+                status, tags = self._status_for_column(name)
+                self.tree.insert(
+                    "",
+                    "end",
+                    iid=name,
+                    text=name,
+                    values=(status, "Extension", "-", "-"),
+                    tags=tags,
+                )
                 self.tree.selection_set(name)
 
     def on_save(self):
@@ -325,12 +1640,23 @@ class MappingEditorView(ttk.Frame):
             if self.spec_version in {"v1.3", "1.3"}
             else None
         )
+        mappings = {}
+        for k, v in self.rules_dict.items():
+            steps = v.steps[:1] if getattr(v, "steps", None) else []
+            if not steps:
+                continue
+            spec_col = self.spec.get_column(k) if self.spec else None
+            if not self._is_step_valid(k, steps[0], spec_col):
+                continue
+            body = {"steps": steps}
+            if v.validation:
+                body["validation"] = v.validation
+            mappings[k] = body
+
         data = {
             "spec_version": self.spec_version,
-            "validation": { "default": self.validation_defaults } if self.validation_defaults else {},
-            "mappings": {
-                k: {"steps": v.steps} for k, v in self.rules_dict.items()
-            }
+            "validation": { "default": self.validation_defaults } if self.validation_defaults is not None else {},
+            "mappings": mappings,
         }
 
         if self.dataset_type:
