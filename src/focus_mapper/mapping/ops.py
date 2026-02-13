@@ -407,6 +407,11 @@ def apply_steps(
                     f"pandas_expr requires non-empty 'expr' for target {target}"
                 )
             series = _eval_pandas_expr(expr, df=df, current=series, target=target)
+            if len(series) != len(df):
+                raise MappingExecutionError(
+                    f"pandas_expr must return one value per input row for target {target} "
+                    f"(expected {len(df)}, got {len(series)})"
+                )
             continue
 
         if op == "sql":
@@ -433,6 +438,11 @@ def apply_steps(
                         )
                     result = conn.execute(query).df().iloc[:, 0]
                 series = result
+                if len(series) != len(df):
+                    raise MappingExecutionError(
+                        f"sql must return one value per input row for target {target} "
+                        f"(expected {len(df)}, got {len(series)})"
+                    )
                 
                 # If the result is datetime-like, ensure it's converted to UTC
                 if pd.api.types.is_datetime64_any_dtype(series):

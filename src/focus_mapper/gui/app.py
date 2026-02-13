@@ -8,7 +8,7 @@ class App(tk.Tk):
         super().__init__()
 
         self.title("Focus Mapper")
-        self.geometry("1350x700")
+        self.geometry("1350x800")
         
         # Configure grid layout
         self.columnconfigure(1, weight=1)

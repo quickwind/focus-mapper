@@ -1,9 +1,12 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 from pathlib import Path
 import yaml
+import pandas as pd
 
 from focus_mapper.spec import load_focus_spec
+from focus_mapper.io import read_table
+from focus_mapper.mapping.ops import apply_steps
 from focus_mapper.validate import default_validation_settings
 from focus_mapper.mapping.config import load_mapping_config, MappingConfig, MappingRule
 
@@ -217,10 +220,17 @@ class MappingEditorView(ttk.Frame):
         
         self.spec = None
         self.current_column = None
+        self.sample_df = None
+        self.dirty = False
+        self._suppress_dirty = False
         
         self._load_data()
+        self._suppress_dirty = True
         self._create_ui()
         self._populate_tree()
+        self._suppress_dirty = False
+        self._update_save_state()
+        self.app.protocol("WM_DELETE_WINDOW", self._on_close_window)
 
     def _load_data(self):
         if self.file_path and self.file_path.exists():
@@ -261,6 +271,7 @@ class MappingEditorView(ttk.Frame):
                 self.dataset_type = "CostAndUsage"
             if not self.file_path:
                 self.file_path = self.mappings_dir / "mapping.yaml"
+            self.dirty = True
         
         try:
             self.spec = load_focus_spec(self.spec_version)
@@ -274,8 +285,10 @@ class MappingEditorView(ttk.Frame):
         toolbar.pack(fill="x", pady=5)
         ttk.Button(toolbar, text="Back", command=self.on_back).pack(side="left")
         ttk.Separator(toolbar, orient="vertical").pack(side="left", fill="y", padx=5)
+        ttk.Button(toolbar, text="Load Sample Data", command=self.on_load_sample_data).pack(side="left")
         ttk.Button(toolbar, text="Validation Defaults", command=self.on_edit_validation_defaults).pack(side="left")
-        ttk.Button(toolbar, text="Save", command=self.on_save).pack(side="right")
+        self.save_btn = ttk.Button(toolbar, text="Save", command=self.on_save)
+        self.save_btn.pack(side="right")
 
         meta = ttk.Frame(self)
         meta.pack(fill="x", pady=(0, 5))
@@ -333,8 +346,12 @@ class MappingEditorView(ttk.Frame):
             else:
                 self.dataset_instance_required.grid_remove()
 
-        name_entry.bind("<KeyRelease>", update_required_indicators)
-        self.dataset_instance_entry.bind("<KeyRelease>", update_required_indicators)
+        def on_meta_change(event=None):
+            update_required_indicators()
+            self.mark_dirty()
+
+        name_entry.bind("<KeyRelease>", on_meta_change)
+        self.dataset_instance_entry.bind("<KeyRelease>", on_meta_change)
 
         toggle_v13_fields()
         update_required_indicators()
@@ -404,13 +421,20 @@ class MappingEditorView(ttk.Frame):
 
         self._col_descriptions = {}
         for col in all_cols:
-            status = "Mapped" if col in mapped_cols else "-"
+            spec_col = self.spec.get_column(col) if self.spec else None
+            step = None
+            if col in self.rules_dict and getattr(self.rules_dict[col], "steps", []):
+                step = self.rules_dict[col].steps[0]
+            is_valid = self._is_step_valid(col, step, spec_col)
+            status = "-"
+            if is_valid:
+                op = step.get("op") if step else None
+                status = f"Mapped ({op})" if op else "Mapped"
             feature_level = "Extension" if col.startswith("x_") else "-"
             data_type = "-"
             nullable = "-"
             description = ""
             if self.spec:
-                spec_col = self.spec.get_column(col)
                 if spec_col:
                     feature_level = spec_col.feature_level
                     data_type = spec_col.data_type
@@ -418,8 +442,23 @@ class MappingEditorView(ttk.Frame):
                         data_type = f"{data_type} ({spec_col.value_format})"
                     nullable = "Yes" if spec_col.allows_nulls else "No"
                     description = spec_col.description or ""
-                    if feature_level.lower() == "mandatory" and col not in mapped_cols:
+                    if feature_level.lower() == "mandatory" and not is_valid:
                         status = "TBD"
+            if feature_level == "Extension":
+                rule = self.rules_dict.get(col)
+                if rule and rule.data_type:
+                    data_type = rule.data_type
+                if rule and rule.description:
+                    description = rule.description
+                allow_nulls = None
+                if rule and rule.validation:
+                    allow_nulls = (rule.validation.get("nullable") or {}).get("allow_nulls")
+                if allow_nulls is True:
+                    nullable = "Yes"
+                elif allow_nulls is False:
+                    nullable = "No"
+                else:
+                    nullable = "Yes"
             self._col_descriptions[col] = description
             self.tree.insert(
                 "",
@@ -497,6 +536,7 @@ class MappingEditorView(ttk.Frame):
         self._show_column_details(col_name)
 
     def _show_column_details(self, col_name):
+        self._suppress_dirty = True
         # Clear right frame
         for widget in self.right_frame.winfo_children():
             widget.destroy()
@@ -517,9 +557,51 @@ class MappingEditorView(ttk.Frame):
             btn = ttk.Button(self.right_frame, text="Create Mapping Rule", 
                              command=lambda: self.create_rule(col_name))
             btn.pack(pady=20)
+            self._suppress_dirty = False
             return
 
         rule = self.rules_dict[col_name]
+        is_extension = spec_col is None
+
+        if is_extension:
+            meta_frame = ttk.LabelFrame(self.right_frame, text="Extension Metadata")
+            meta_frame.pack(fill="x", padx=5, pady=(0, 6))
+            ttk.Label(meta_frame, text="Data Type:").grid(row=0, column=0, sticky="w", padx=(6, 6), pady=4)
+            data_type_var = tk.StringVar(value=rule.data_type or "String")
+            type_options = ["String", "Decimal", "Date/Time", "Integer", "Boolean", "JSON"]
+            data_type_cb = ttk.Combobox(
+                meta_frame,
+                textvariable=data_type_var,
+                values=type_options,
+                state="readonly",
+                width=18,
+            )
+            data_type_cb.grid(row=0, column=1, sticky="w", pady=4)
+            _set_tooltip(data_type_cb, "Data type for this extension column.")
+
+            ttk.Label(meta_frame, text="Description:").grid(row=1, column=0, sticky="w", padx=(6, 6), pady=4)
+            desc_var = tk.StringVar(value=rule.description or "")
+            desc_entry = ttk.Entry(meta_frame, textvariable=desc_var, width=60)
+            desc_entry.grid(row=1, column=1, sticky="w", pady=4)
+            _set_tooltip(desc_entry, "Short description for this extension column.")
+
+            ttk.Label(meta_frame, text="Nullable:").grid(row=2, column=0, sticky="w", padx=(6, 6), pady=4)
+            nullable_val = None
+            if rule.validation and isinstance(rule.validation, dict):
+                nullable_val = (rule.validation.get("nullable") or {}).get("allow_nulls")
+            if nullable_val is None:
+                nullable_val = True
+            nullable_var = tk.BooleanVar(value=bool(nullable_val))
+            nullable_cb = ttk.Checkbutton(meta_frame, variable=nullable_var, text="Allow nulls")
+            nullable_cb.grid(row=2, column=1, sticky="w", pady=4)
+            _set_tooltip(nullable_cb, "Whether this extension column allows null values.")
+
+            def on_ext_meta_change(*_):
+                self._update_rule_meta(col_name, data_type_var.get().strip() or None, desc_var.get().strip() or None)
+
+            data_type_cb.bind("<<ComboboxSelected>>", lambda _e: on_ext_meta_change())
+            desc_entry.bind("<KeyRelease>", lambda _e: on_ext_meta_change())
+            nullable_cb.configure(command=lambda: self._update_rule_nullable(col_name, nullable_var.get()))
 
         lf = ttk.LabelFrame(self.right_frame, text="Transformation Configuration")
         lf.pack(fill="both", expand=True, padx=5, pady=5)
@@ -540,12 +622,20 @@ class MappingEditorView(ttk.Frame):
             step = {"op": op}
             self._set_single_step(col_name, step)
             self._render_op_config(config_container, col_name, step, spec_col)
+            if hasattr(self, "preview_frame"):
+                if op in {"const", "null"}:
+                    self.preview_frame.pack_forget()
+                else:
+                    self.preview_frame.pack(fill="both", expand=False, padx=5, pady=5)
+                    self._update_preview(col_name, step)
 
         def clear_op():
             self.op_var.set("")
             self._set_single_step(col_name, None)
             for w in config_container.winfo_children():
                 w.destroy()
+            if hasattr(self, "preview_frame"):
+                self.preview_frame.pack_forget()
 
         op_entry.bind("<Button-1>", lambda _e: pick_op())
         ttk.Button(config_header, text="▼", width=2, command=pick_op).grid(row=0, column=2, padx=(0, 6))
@@ -557,6 +647,34 @@ class MappingEditorView(ttk.Frame):
 
         if rule.steps:
             self._render_op_config(config_container, col_name, rule.steps[0], spec_col)
+
+        if self.sample_df is not None:
+            # Preview panel
+            self.preview_frame = ttk.LabelFrame(self.right_frame, text="Preview (first 100 rows)")
+            self.preview_frame.pack(fill="both", expand=False, padx=5, pady=5)
+            self.preview_tree = ttk.Treeview(
+                self.preview_frame,
+                columns=("index", "value"),
+                show="headings",
+                height=12,
+            )
+            self.preview_tree.heading("index", text="#")
+            self.preview_tree.heading("value", text="Value")
+            self.preview_tree.column("index", width=60, anchor="e")
+            self.preview_tree.column("value", width=300)
+            preview_scroll = ttk.Scrollbar(self.preview_frame, orient="vertical", command=self.preview_tree.yview)
+            self.preview_tree.configure(yscrollcommand=preview_scroll.set)
+            self.preview_tree.pack(side="left", fill="both", expand=True)
+            preview_scroll.pack(side="right", fill="y")
+            self.preview_error = ttk.Label(self.preview_frame, text="", foreground="red")
+            self.preview_error.pack(anchor="w", padx=6, pady=(4, 0))
+
+            if rule.steps:
+                if rule.steps[0].get("op") in {"const", "null"}:
+                    self.preview_frame.pack_forget()
+                else:
+                    self._update_preview(col_name, rule.steps[0])
+        self._suppress_dirty = False
 
     def _pick_operation_type(self, current: str | None = None) -> str | None:
         options = [
@@ -583,6 +701,11 @@ class MappingEditorView(ttk.Frame):
             "sql": "DuckDB SQL expression or query.",
             "pandas_expr": "Pandas expression evaluated against the DataFrame.",
         }
+        if self.spec and self.current_column:
+            spec_col = self.spec.get_column(self.current_column)
+            if spec_col and not spec_col.allows_nulls:
+                if "null" in options:
+                    options.remove("null")
         picker = _OpPicker(self, options, descriptions)
         return picker.show("Add Operation", current=current)
 
@@ -608,8 +731,53 @@ class MappingEditorView(ttk.Frame):
             data_type=rule.data_type,
             validation=validation,
         )
+        if self.tree.exists(col_name) and (self.spec is None or self.spec.get_column(col_name) is None):
+            allow_nulls = None
+            if validation:
+                allow_nulls = (validation.get("nullable") or {}).get("allow_nulls")
+            if allow_nulls is True:
+                self.tree.set(col_name, "nullable", "Yes")
+            elif allow_nulls is False:
+                self.tree.set(col_name, "nullable", "No")
+            else:
+                self.tree.set(col_name, "nullable", "Yes")
         self.mark_dirty()
 
+    def _update_rule_meta(self, col_name: str, data_type: str | None, description: str | None) -> None:
+        rule = self.rules_dict.get(col_name)
+        if not rule:
+            rule = MappingRule(target=col_name, steps=[])
+        self.rules_dict[col_name] = MappingRule(
+            target=rule.target,
+            steps=rule.steps,
+            description=description,
+            data_type=data_type,
+            validation=rule.validation,
+        )
+        if self.tree.exists(col_name):
+            self.tree.set(col_name, "data_type", data_type or "-")
+        if description is not None:
+            self._col_descriptions[col_name] = description
+        self.mark_dirty()
+
+    def _update_rule_nullable(self, col_name: str, allow_nulls: bool) -> None:
+        rule = self.rules_dict.get(col_name)
+        if not rule:
+            rule = MappingRule(target=col_name, steps=[])
+        validation = dict(rule.validation or {})
+        nullable = dict(validation.get("nullable") or {})
+        nullable["allow_nulls"] = bool(allow_nulls)
+        validation["nullable"] = nullable
+        self.rules_dict[col_name] = MappingRule(
+            target=rule.target,
+            steps=rule.steps,
+            description=rule.description,
+            data_type=rule.data_type,
+            validation=validation,
+        )
+        if self.tree.exists(col_name):
+            self.tree.set(col_name, "nullable", "Yes" if allow_nulls else "No")
+        self.mark_dirty()
     def _edit_validation_dialog(self, title: str, initial: dict | None, data_type: str | None = None, allow_remove: bool = False) -> dict | None:
         dialog = tk.Toplevel(self)
         dialog.title(title)
@@ -942,6 +1110,12 @@ class MappingEditorView(ttk.Frame):
 
         dialog.transient(self)
         dialog.grab_set()
+        dialog.update_idletasks()
+        w = dialog.winfo_width()
+        h = dialog.winfo_height()
+        x = self.winfo_rootx() + (self.winfo_width() - w) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - h) // 2
+        dialog.geometry(f"{w}x{h}+{max(x, 0)}+{max(y, 0)}")
         self.wait_window(dialog)
         return result[0]
 
@@ -960,6 +1134,8 @@ class MappingEditorView(ttk.Frame):
             spec_col = self.spec.get_column(col_name)
             if spec_col and spec_col.data_type:
                 data_type = spec_col.data_type
+        if data_type is None and rule and rule.data_type:
+            data_type = rule.data_type
         base = self.validation_defaults or default_validation_settings()
         merged = _deep_merge(base, current or {})
         updated = self._edit_validation_dialog(
@@ -1029,14 +1205,17 @@ class MappingEditorView(ttk.Frame):
             if not isinstance(operands, list) or len(operands) != 2:
                 return False
             for operand in operands:
-                if operand.get("current") is True:
-                    continue
                 if "column" in operand:
                     if not str(operand.get("column", "")).strip():
                         return False
                     continue
                 if "const" in operand:
-                    if not str(operand.get("const", "")).strip():
+                    val = operand.get("const")
+                    if val is None:
+                        return False
+                    if isinstance(val, (int, float)):
+                        continue
+                    if not str(val).strip():
                         return False
                     continue
                 return False
@@ -1077,8 +1256,31 @@ class MappingEditorView(ttk.Frame):
                 _set_tooltip(lbl, tooltip)
             return lbl, star, row
 
-        def add_entry(key: str, tooltip: str, multiline: bool = False, width: int = 40, required: bool = False, label_text: str | None = None):
+        def add_entry(key: str, tooltip: str, multiline: bool = False, width: int = 40, required: bool = False, label_text: str | None = None, use_column_picker: bool = False):
             _, label_star, _ = add_label(label_text or f"{key}:", tooltip, required=required)
+            if use_column_picker and self.sample_df is not None:
+                row = ttk.Frame(parent)
+                row.pack(fill="x", pady=(0, 6))
+                cb = ttk.Combobox(row, values=list(self.sample_df.columns), state="readonly", width=width)
+                cb.pack(side="left", fill="x", expand=True)
+                input_star = _create_star(row, "Required", side="left", padx=(6, 0)) if required else None
+                if key in step and step[key] is not None:
+                    cb.set(str(step[key]))
+
+                def on_select(_event=None):
+                    val = cb.get()
+                    step[key] = val
+                    if required:
+                        show = not bool(val.strip())
+                        _set_star_visible(label_star, show, "Required")
+                        _set_star_visible(input_star, show, "Required")
+                    self.mark_dirty()
+                    self._set_status_for_column(col_name)
+                    self._update_preview(col_name, step)
+                cb.bind("<<ComboboxSelected>>", on_select)
+                _set_tooltip(cb, tooltip)
+                on_select()
+                return cb
             if multiline:
                 frame = ttk.Frame(parent)
                 frame.pack(fill="both", expand=True, pady=(0, 6))
@@ -1100,6 +1302,7 @@ class MappingEditorView(ttk.Frame):
                         _set_star_visible(input_star, show, "Required")
                     self.mark_dirty()
                     self._set_status_for_column(col_name)
+                    self._update_preview(col_name, step)
                 text.bind("<KeyRelease>", on_change)
                 _set_tooltip(text, tooltip)
                 on_change()
@@ -1121,6 +1324,7 @@ class MappingEditorView(ttk.Frame):
                     _set_star_visible(input_star, show, "Required")
                 self.mark_dirty()
                 self._set_status_for_column(col_name)
+                self._update_preview(col_name, step)
             entry.bind("<KeyRelease>", on_change)
             _set_tooltip(entry, tooltip)
             on_change()
@@ -1136,7 +1340,10 @@ class MappingEditorView(ttk.Frame):
             btns = ttk.Frame(frame)
             btns.pack(side="left", padx=6, fill="y")
 
-            entry = ttk.Entry(btns, width=16)
+            if self.sample_df is not None:
+                entry = ttk.Combobox(btns, values=list(self.sample_df.columns), state="readonly", width=16)
+            else:
+                entry = ttk.Entry(btns, width=16)
             entry.pack(pady=(0, 4))
             _set_tooltip(entry, "Column name to add.")
             ttk.Button(btns, text="+", width=3, command=lambda: add_item()).pack(pady=(0, 4))
@@ -1155,6 +1362,7 @@ class MappingEditorView(ttk.Frame):
                     _set_star_visible(input_star, show, "Required")
                 self.mark_dirty()
                 self._set_status_for_column(col_name)
+                self._update_preview(col_name, step)
 
             def add_item():
                 val = entry.get().strip()
@@ -1164,7 +1372,8 @@ class MappingEditorView(ttk.Frame):
                 if val in existing:
                     return
                 listbox.insert("end", val)
-                entry.delete(0, "end")
+                if isinstance(entry, ttk.Entry):
+                    entry.delete(0, "end")
                 sync_list()
 
             def remove_item():
@@ -1195,7 +1404,7 @@ class MappingEditorView(ttk.Frame):
             return listbox
 
         if op == "from_column":
-            add_entry("column", "Input column name to use as the value.", required=True)
+            add_entry("column", "Input column name to use as the value.", required=True, use_column_picker=True)
             return
 
         if op == "const":
@@ -1261,7 +1470,7 @@ class MappingEditorView(ttk.Frame):
             return
 
         if op == "map_values":
-            add_entry("column", "Source column name (required for single-step).", required=True)
+            add_entry("column", "Source column name (required for single-step).", required=True, use_column_picker=True)
             _, label_star, _ = add_label("mapping:", "Each row maps a source value to a target value.", required=True)
             map_frame = ttk.Frame(parent)
             map_frame.pack(fill="x", pady=(0, 6))
@@ -1297,6 +1506,7 @@ class MappingEditorView(ttk.Frame):
                 _set_star_visible(input_star, show, reason)
                 self.mark_dirty()
                 self._set_status_for_column(col_name)
+                self._update_preview(col_name, step)
 
             def add_row(src_val: str = "", dst_val: str = ""):
                 row = ttk.Frame(rows_frame)
@@ -1362,46 +1572,63 @@ class MappingEditorView(ttk.Frame):
 
                 _load_operand(left_type, left_val, step["operands"][0])
                 _load_operand(right_type, right_val, step["operands"][1])
+            else:
+                step["operands"] = [{"column": left_val.get()}, {"const": right_val.get()}]
 
             left_type_cb = ttk.Combobox(row, values=["column", "const"], textvariable=left_type, state="readonly", width=8)
             left_type_cb.pack(side="left")
-            left_entry = ttk.Entry(row, textvariable=left_val, width=18)
-            left_entry.pack(side="left", padx=(4, 8))
+            left_container = ttk.Frame(row)
+            left_container.pack(side="left", padx=(4, 8))
 
             op_cb = ttk.Combobox(row, values=["+", "-", "x", "/"], textvariable=op_var, state="readonly", width=5)
             op_cb.pack(side="left", padx=(0, 8))
 
             right_type_cb = ttk.Combobox(row, values=["column", "const"], textvariable=right_type, state="readonly", width=8)
             right_type_cb.pack(side="left")
-            right_entry = ttk.Entry(row, textvariable=right_val, width=18)
-            right_entry.pack(side="left", padx=(4, 0))
+            right_container = ttk.Frame(row)
+            right_container.pack(side="left", padx=(4, 0))
 
             tip_left_type = _WidgetTooltip(left_type_cb)
-            tip_left_val = _WidgetTooltip(left_entry)
             tip_op = _WidgetTooltip(op_cb)
             tip_right_type = _WidgetTooltip(right_type_cb)
-            tip_right_val = _WidgetTooltip(right_entry)
             left_type_cb.bind("<Enter>", lambda _e: tip_left_type.show("Left operand type (column or const)."))
             left_type_cb.bind("<Leave>", lambda _e: tip_left_type.hide())
-            left_entry.bind("<Enter>", lambda _e: tip_left_val.show("Left operand value."))
-            left_entry.bind("<Leave>", lambda _e: tip_left_val.hide())
             op_cb.bind("<Enter>", lambda _e: tip_op.show("Operator."))
             op_cb.bind("<Leave>", lambda _e: tip_op.hide())
             right_type_cb.bind("<Enter>", lambda _e: tip_right_type.show("Right operand type (column or const)."))
             right_type_cb.bind("<Leave>", lambda _e: tip_right_type.hide())
-            right_entry.bind("<Enter>", lambda _e: tip_right_val.show("Right operand value."))
-            right_entry.bind("<Leave>", lambda _e: tip_right_val.hide())
 
             hint = ttk.Label(parent, text="add = +, sub = -, mul = x, div = /", foreground="#666")
             hint.pack(anchor="w", pady=(0, 6))
 
-            def update_math():
-                def build_operand(t, v):
-                    if t == "column":
-                        return {"column": v.strip()}
-                    return {"const": v.strip()}
+            def _get_operand_value(widget, fallback_var):
+                try:
+                    return widget.get()
+                except Exception:
+                    return fallback_var.get()
 
-                operands = [build_operand(left_type.get(), left_val.get()), build_operand(right_type.get(), right_val.get())]
+            def _parse_const(val: str):
+                try:
+                    if val.strip() == "":
+                        return None
+                    if "." in val or "e" in val.lower():
+                        return float(val)
+                    return int(val)
+                except Exception:
+                    return None
+
+            def update_math():
+                def build_operand(t, widget, fallback_var):
+                    v = _get_operand_value(widget, fallback_var).strip()
+                    if t == "column":
+                        return {"column": v}
+                    const_val = _parse_const(v)
+                    return {"const": const_val if const_val is not None else v}
+
+                operands = [
+                    build_operand(left_type.get(), left_entry, left_val),
+                    build_operand(right_type.get(), right_entry, right_val),
+                ]
                 op_map = {"+": "add", "-": "sub", "x": "mul", "/": "div"}
                 step["operator"] = op_map.get(op_var.get(), "")
                 step["operands"] = operands
@@ -1411,15 +1638,41 @@ class MappingEditorView(ttk.Frame):
                     label_star.pack_forget() if valid else label_star.pack(side="left", padx=(4, 0))
                 self.mark_dirty()
                 self._set_status_for_column(col_name)
+                self._update_preview(col_name, step)
 
-                left_entry.configure(state="normal")
-                right_entry.configure(state="normal")
+            def rebuild_operand(container, operand_type, value_var):
+                for w in container.winfo_children():
+                    w.destroy()
+                if self.sample_df is not None and operand_type.get() == "column":
+                    new = ttk.Combobox(container, values=list(self.sample_df.columns), state="readonly", width=18)
+                    if value_var.get():
+                        new.set(value_var.get())
+                    new.bind("<<ComboboxSelected>>", lambda _e: update_math())
+                else:
+                    new = ttk.Entry(container, textvariable=value_var, width=18)
+                    new.bind("<KeyRelease>", lambda _e: update_math())
+                new.pack(side="left")
+                tip = _WidgetTooltip(new)
+                tip_text = "Operand column name." if operand_type.get() == "column" else "Operand constant value."
+                new.bind("<Enter>", lambda _e: tip.show(tip_text))
+                new.bind("<Leave>", lambda _e: tip.hide())
+                return new
 
-            left_type_cb.bind("<<ComboboxSelected>>", lambda _e: update_math())
-            right_type_cb.bind("<<ComboboxSelected>>", lambda _e: update_math())
+            def on_left_type_change(_event=None):
+                nonlocal left_entry
+                left_entry = rebuild_operand(left_container, left_type, left_val)
+                update_math()
+
+            def on_right_type_change(_event=None):
+                nonlocal right_entry
+                right_entry = rebuild_operand(right_container, right_type, right_val)
+                update_math()
+
+            left_type_cb.bind("<<ComboboxSelected>>", on_left_type_change)
+            right_type_cb.bind("<<ComboboxSelected>>", on_right_type_change)
             op_cb.bind("<<ComboboxSelected>>", lambda _e: update_math())
-            left_entry.bind("<KeyRelease>", lambda _e: update_math())
-            right_entry.bind("<KeyRelease>", lambda _e: update_math())
+            left_entry = rebuild_operand(left_container, left_type, left_val)
+            right_entry = rebuild_operand(right_container, right_type, right_val)
             update_math()
             return
 
@@ -1427,7 +1680,7 @@ class MappingEditorView(ttk.Frame):
             cond = ttk.Frame(parent)
             cond.pack(fill="x", pady=(0, 6))
             ttk.Label(cond, text="if column").pack(side="left")
-            col_entry = ttk.Entry(cond, width=20)
+            col_entry = ttk.Combobox(cond, values=list(self.sample_df.columns), state="readonly", width=20) if self.sample_df is not None else ttk.Entry(cond, width=20)
             col_entry.pack(side="left", padx=4)
             ttk.Label(cond, text="==").pack(side="left")
             val_entry = ttk.Entry(cond, width=20)
@@ -1459,7 +1712,10 @@ class MappingEditorView(ttk.Frame):
             else_entry.bind("<Leave>", lambda _e: tip_else.hide())
 
             if step.get("column"):
-                col_entry.insert(0, str(step.get("column")))
+                if isinstance(col_entry, ttk.Combobox):
+                    col_entry.set(str(step.get("column")))
+                else:
+                    col_entry.insert(0, str(step.get("column")))
             if step.get("value") is not None:
                 val_entry.insert(0, str(step.get("value")))
             if step.get("then") is not None:
@@ -1474,8 +1730,11 @@ class MappingEditorView(ttk.Frame):
                 step["else"] = else_entry.get()
                 self.mark_dirty()
                 self._set_status_for_column(col_name)
+                self._update_preview(col_name, step)
 
             col_entry.bind("<KeyRelease>", on_change)
+            if isinstance(col_entry, ttk.Combobox):
+                col_entry.bind("<<ComboboxSelected>>", on_change)
             val_entry.bind("<KeyRelease>", on_change)
             then_entry.bind("<KeyRelease>", on_change)
             else_entry.bind("<KeyRelease>", on_change)
@@ -1506,6 +1765,7 @@ class MappingEditorView(ttk.Frame):
             text.bind("<KeyRelease>", on_change)
             _set_tooltip(text, "Pandas expression (uses df and current).")
             on_change()
+            ttk.Button(parent, text="Dry Run Test", command=lambda: self._run_preview_test(col_name, step)).pack(anchor="w", pady=(4, 0))
             return
 
         if op == "sql":
@@ -1551,6 +1811,7 @@ class MappingEditorView(ttk.Frame):
             mode_var.trace_add("write", lambda *_: on_mode_change())
             _set_tooltip(text, "SQL expression or query based on selected mode.")
             on_sql_change()
+            ttk.Button(parent, text="Dry Run Test", command=lambda: self._run_preview_test(col_name, step)).pack(anchor="w", pady=(4, 0))
             return
 
     def _status_for_column(self, col_name: str) -> tuple[str, tuple[str, ...]]:
@@ -1559,7 +1820,10 @@ class MappingEditorView(ttk.Frame):
         if col_name in self.rules_dict and getattr(self.rules_dict[col_name], "steps", []):
             step = self.rules_dict[col_name].steps[0]
         is_valid = self._is_step_valid(col_name, step, spec_col)
-        status = "Mapped" if is_valid else "-"
+        status = "-"
+        if is_valid:
+            op = step.get("op") if step else None
+            status = f"Mapped ({op})" if op else "Mapped"
         if spec_col and spec_col.feature_level.lower() == "mandatory" and not is_valid:
             return "TBD", ("tbd",)
         return status, ()
@@ -1570,39 +1834,320 @@ class MappingEditorView(ttk.Frame):
             self.tree.set(col_name, "status", status)
             self.tree.item(col_name, tags=tags)
 
-    def create_rule(self, col_name):
+    def create_rule(
+        self,
+        col_name,
+        data_type: str | None = None,
+        description: str | None = None,
+        initial_step: dict | None = None,
+        nullable: bool | None = None,
+    ):
         # Create a new MappingRule
         # Since MappingRule is frozen, we might need a mutable proxy or just recreate it on save/update?
         # Actually, MappingRule.steps is a list[dict]. The list itself is mutable!
         # The MappingRule object is frozen, so I can't assign to .steps if it was not a list, but list content can catch changes.
         # However, to be safe and clean, let's create a new one.
-        self.rules_dict[col_name] = MappingRule(target=col_name, steps=[])
+        steps = []
+        if initial_step:
+            steps = [initial_step]
+        validation = None
+        if nullable is not None:
+            validation = {"nullable": {"allow_nulls": bool(nullable)}}
+        self.rules_dict[col_name] = MappingRule(
+            target=col_name,
+            steps=steps,
+            description=description,
+            data_type=data_type,
+            validation=validation,
+        )
         self.mark_dirty()
         self._set_status_for_column(col_name)
         self._show_column_details(col_name)
 
-    def mark_dirty(self):
-        # TODO: Enable save button state or * indicator
-        pass
+    def on_load_sample_data(self):
+        path = filedialog.askopenfilename(
+            title="Load Sample Data (CSV/Parquet)",
+            filetypes=[("Data files", "*.csv *.parquet"), ("All files", "*.*")],
+            parent=self,
+        )
+        if not path:
+            return
+        try:
+            df = read_table(Path(path))
+            self.sample_df = df.head(100)
+            messagebox.showinfo("Sample Loaded", f"Loaded {len(self.sample_df)} rows.", parent=self)
+            if self.current_column:
+                self._show_column_details(self.current_column)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load data: {e}", parent=self)
 
-    def on_add_column(self):
-        name = simpledialog.askstring("New Extension Column", "Enter column name (e.g., x_CostCenter):", parent=self)
-        if name:
+    def _update_preview(self, col_name: str, step: dict | None):
+        if not hasattr(self, "preview_tree"):
+            return
+        # Clear
+        for item in self.preview_tree.get_children():
+            self.preview_tree.delete(item)
+        self.preview_error.config(text="")
+        if self.sample_df is None or step is None:
+            return
+        if step.get("op") in {"const", "null"}:
+            return
+        try:
+            op = step.get("op")
+            if op in {"from_column", "map_values", "when"}:
+                src = step.get("column")
+                if not src or src not in self.sample_df.columns:
+                    self.preview_error.config(text="Preview requires a valid source column.")
+                    return
+            if op in {"coalesce", "concat"}:
+                cols = step.get("columns") or []
+                if not cols or not all(c in self.sample_df.columns for c in cols):
+                    self.preview_error.config(text="Preview requires valid source columns.")
+                    return
+            step_preview = dict(step)
+            if op == "when":
+                src = step_preview.get("column")
+                series = self.sample_df[src]
+                value = step_preview.get("value")
+                then_value = step_preview.get("then")
+                else_value = step_preview.get("else")
+                if pd.api.types.is_numeric_dtype(series):
+                    def _parse_num(v):
+                        try:
+                            if v is None or str(v).strip() == "":
+                                return v
+                            return float(v)
+                        except Exception:
+                            return v
+                    value = _parse_num(value)
+                    then_value = _parse_num(then_value)
+                    else_value = _parse_num(else_value)
+                mask = series == value
+                result = pd.Series([else_value] * len(series))
+                series = result.where(~mask, other=then_value)
+            elif step.get("op") == "map_values" and (not step.get("mapping")):
+                src = step.get("column")
+                if src and src in self.sample_df.columns:
+                    series = self.sample_df[src]
+                else:
+                    series = apply_steps(self.sample_df, steps=[step_preview], target=col_name)
+            else:
+                series = apply_steps(self.sample_df, steps=[step_preview], target=col_name)
+            for idx, val in enumerate(series.head(100).tolist(), start=1):
+                self.preview_tree.insert("", "end", values=(idx, str(val)))
+        except Exception as e:
+            self.preview_error.config(text=str(e))
+
+    def _run_preview_test(self, col_name: str, step: dict | None):
+        if self.sample_df is None:
+            messagebox.showwarning("No Sample Data", "Load sample data first.", parent=self)
+            return
+        if step is None:
+            return
+        # Clear
+        if hasattr(self, "preview_tree"):
+            for item in self.preview_tree.get_children():
+                self.preview_tree.delete(item)
+        if hasattr(self, "preview_error"):
+            self.preview_error.config(text="")
+        try:
+            series = apply_steps(self.sample_df, steps=[step], target=col_name)
+            if hasattr(self, "preview_tree"):
+                for idx, val in enumerate(series.head(100).tolist(), start=1):
+                    self.preview_tree.insert("", "end", values=(idx, str(val)))
+        except Exception as e:
+            err = str(e)
+            dialog = tk.Toplevel(self)
+            dialog.title("Dry Run Failed")
+            dialog.geometry("600x300")
+            dialog.resizable(True, True)
+            content = ttk.Frame(dialog, padding=10)
+            content.pack(fill="both", expand=True)
+            ttk.Label(content, text="Error:", font=("Helvetica", 12, "bold")).pack(anchor="w")
+            text = tk.Text(content, height=10, wrap="word")
+            text.pack(fill="both", expand=True, pady=(6, 10))
+            text.insert("1.0", err)
+            text.configure(state="disabled")
+            ttk.Button(content, text="OK", command=dialog.destroy).pack(side="right")
+            dialog.transient(self)
+            dialog.grab_set()
+            self.wait_window(dialog)
+
+    def _update_save_state(self):
+        if hasattr(self, "save_btn"):
+            self.save_btn.configure(state="normal" if self.dirty else "disabled")
+
+    def _confirm_discard(self) -> bool:
+        if not self.dirty:
+            return True
+        return messagebox.askyesno(
+            "Unsaved Changes",
+            "You have unsaved changes. Quit without saving?",
+            parent=self,
+        )
+
+    def _on_close_window(self):
+        if self._confirm_discard():
+            self.app.destroy()
+
+    def mark_dirty(self):
+        if self._suppress_dirty:
+            return
+        if not self.dirty:
+            self.dirty = True
+            self._update_save_state()
+
+    def _infer_extension_type(self, col_name: str) -> str:
+        if self.sample_df is None or col_name not in self.sample_df.columns:
+            return "String"
+        series = self.sample_df[col_name]
+        try:
+            from pandas.api.types import (
+                is_bool_dtype,
+                is_datetime64_any_dtype,
+                is_float_dtype,
+                is_integer_dtype,
+            )
+        except Exception:
+            return "String"
+        if is_datetime64_any_dtype(series):
+            return "Date/Time"
+        if is_integer_dtype(series):
+            return "Integer"
+        if is_float_dtype(series):
+            return "Decimal"
+        if is_bool_dtype(series):
+            return "Boolean"
+        if series.dtype == "object":
+            sample = next((v for v in series if v is not None and v is not pd.NA), None)
+            if isinstance(sample, dict):
+                return "JSON"
+        return "String"
+
+    def _prompt_extension_column(self):
+        dialog = tk.Toplevel(self)
+        dialog.title("New Extension Column")
+        dialog.resizable(False, False)
+
+        content = ttk.Frame(dialog, padding=10)
+        content.pack(fill="both", expand=True)
+
+        ttk.Label(content, text="Column Name:").grid(row=0, column=0, sticky="w", pady=4)
+        name_var = tk.StringVar()
+        name_values = list(self.sample_df.columns) if self.sample_df is not None else []
+        name_cb = ttk.Combobox(content, textvariable=name_var, values=name_values, width=40)
+        name_cb.grid(row=0, column=1, sticky="w", pady=4)
+        _set_tooltip(name_cb, "Choose from sample data or type a new extension column name.")
+
+        ttk.Label(content, text="Data Type:").grid(row=1, column=0, sticky="w", pady=4)
+        data_type_var = tk.StringVar(value="String")
+        type_options = ["String", "Decimal", "Date/Time", "Integer", "Boolean", "JSON"]
+        data_type_cb = ttk.Combobox(
+            content,
+            textvariable=data_type_var,
+            values=type_options,
+            state="readonly",
+            width=18,
+        )
+        data_type_cb.grid(row=1, column=1, sticky="w", pady=4)
+        _set_tooltip(data_type_cb, "Data type for the extension column.")
+
+        ttk.Label(content, text="Description:").grid(row=2, column=0, sticky="w", pady=4)
+        desc_var = tk.StringVar()
+        desc_entry = ttk.Entry(content, textvariable=desc_var, width=60)
+        desc_entry.grid(row=2, column=1, sticky="w", pady=4)
+        _set_tooltip(desc_entry, "Short description for this extension column.")
+
+        ttk.Label(content, text="Nullable:").grid(row=3, column=0, sticky="w", pady=4)
+        nullable_var = tk.BooleanVar(value=True)
+        nullable_cb = ttk.Checkbutton(content, variable=nullable_var, text="Allow nulls")
+        nullable_cb.grid(row=3, column=1, sticky="w", pady=4)
+        _set_tooltip(nullable_cb, "Whether this extension column allows null values.")
+
+        def on_name_change(*_):
+            name = name_var.get().strip()
+            if name in name_values:
+                data_type_var.set(self._infer_extension_type(name))
+
+        name_cb.bind("<<ComboboxSelected>>", on_name_change)
+        name_cb.bind("<KeyRelease>", on_name_change)
+
+        result = {"value": None}
+
+        def on_ok():
+            name = (name_var.get() or "").strip()
+            if not name:
+                messagebox.showwarning("Missing Name", "Please enter a column name.", parent=dialog)
+                return
+            source_column = None
+            if name in name_values:
+                source_column = name
             if not name.startswith("x_"):
                 name = "x_" + name
-            if name not in self.rules_dict:
-                self.create_rule(name)
-                # Add to tree
-                status, tags = self._status_for_column(name)
-                self.tree.insert(
-                    "",
-                    "end",
-                    iid=name,
-                    text=name,
-                    values=(status, "Extension", "-", "-"),
-                    tags=tags,
-                )
-                self.tree.selection_set(name)
+            if self.tree.exists(name) or name in self.rules_dict:
+                messagebox.showwarning("Duplicate Column", f"{name} already exists.", parent=dialog)
+                return
+            result["value"] = {
+                "name": name,
+                "data_type": data_type_var.get().strip() or "String",
+                "description": (desc_var.get() or "").strip() or None,
+                "source_column": source_column,
+                "nullable": bool(nullable_var.get()),
+            }
+            dialog.destroy()
+
+        def on_cancel():
+            dialog.destroy()
+
+        btns = ttk.Frame(content)
+        btns.grid(row=4, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        ttk.Button(btns, text="Cancel", command=on_cancel).pack(side="right")
+        ttk.Button(btns, text="OK", command=on_ok).pack(side="right", padx=6)
+
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.update_idletasks()
+        w = dialog.winfo_width()
+        h = dialog.winfo_height()
+        x = self.winfo_rootx() + (self.winfo_width() - w) // 2
+        y = self.winfo_rooty() + (self.winfo_height() - h) // 2
+        dialog.geometry(f"{w}x{h}+{max(x, 0)}+{max(y, 0)}")
+        self.wait_window(dialog)
+        return result["value"]
+
+    def on_add_column(self):
+        result = self._prompt_extension_column()
+        if not result:
+            return
+        name = result["name"]
+        data_type = result.get("data_type")
+        description = result.get("description")
+        source_column = result.get("source_column")
+        nullable = result.get("nullable")
+        initial_step = None
+        if source_column:
+            initial_step = {"op": "from_column", "column": source_column}
+        if name not in self.rules_dict:
+            self.create_rule(
+                name,
+                data_type=data_type,
+                description=description,
+                initial_step=initial_step,
+                nullable=nullable,
+            )
+            # Add to tree
+            status, tags = self._status_for_column(name)
+            nullable_display = "Yes" if nullable else "No"
+            self.tree.insert(
+                "",
+                "end",
+                iid=name,
+                text=name,
+                values=(status, "Extension", data_type or "-", nullable_display),
+                tags=tags,
+            )
+            self._col_descriptions[name] = description or ""
+            self.tree.selection_set(name)
 
     def on_save(self):
         name = (self.name_var.get() or "").strip()
@@ -1649,6 +2194,10 @@ class MappingEditorView(ttk.Frame):
             if not self._is_step_valid(k, steps[0], spec_col):
                 continue
             body = {"steps": steps}
+            if v.description:
+                body["description"] = v.description
+            if v.data_type:
+                body["data_type"] = v.data_type
             if v.validation:
                 body["validation"] = v.validation
             mappings[k] = body
@@ -1673,8 +2222,12 @@ class MappingEditorView(ttk.Frame):
             except Exception:
                 pass
         self.original_path = self.file_path
+        self.dirty = False
+        self._update_save_state()
         
         messagebox.showinfo("Saved", f"Mapping saved to {self.file_path.name}", parent=self)
 
     def on_back(self):
+        if not self._confirm_discard():
+            return
         self.app.show_mappings_view()
