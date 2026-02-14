@@ -9,6 +9,7 @@ from pathlib import Path
 class App(tk.Tk):
     """Main GUI application window and view router."""
     def __init__(self):
+        """Initialize root window, shared settings, and initial view."""
         super().__init__()
 
         self.title("Focus Mapper")

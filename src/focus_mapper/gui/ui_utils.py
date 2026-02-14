@@ -11,11 +11,13 @@ from typing import Callable
 class WidgetTooltip:
     """Small hover tooltip bound to a Tk widget."""
     def __init__(self, widget):
+        """Create tooltip controller for one widget."""
         self.widget = widget
         self.tip = None
         self.label = None
 
     def show(self, text: str):
+        """Show tooltip content near the widget."""
         if not text:
             self.hide()
             return
@@ -32,6 +34,7 @@ class WidgetTooltip:
         self.tip.geometry(f"+{x}+{y}")
 
     def hide(self):
+        """Hide tooltip window if it exists."""
         if self.tip is not None:
             self.tip.destroy()
             self.tip = None

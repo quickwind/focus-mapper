@@ -1,22 +1,30 @@
+"""Legacy Tkinter step-form widgets for operation configuration."""
+
 import tkinter as tk
 from tkinter import ttk
 
 class StepForm(ttk.Frame):
+    """Base class for operation step configuration subforms."""
     def __init__(self, parent, step_config, on_change=None):
+        """Initialize form with mutable step config and change callback."""
         super().__init__(parent)
         self.step_config = step_config
         self.on_change = on_change
         self._create_widgets()
 
     def _create_widgets(self):
+        """Create widgets for the form. Implemented by subclasses."""
         pass
 
     def _notify_change(self):
+        """Notify parent editor that step configuration changed."""
         if self.on_change:
             self.on_change()
 
 class FromColumnForm(StepForm):
+    """Form for `from_column` operation."""
     def _create_widgets(self):
+        """Render source-column input."""
         ttk.Label(self, text="Source Column:").pack(anchor="w")
         self.entry = ttk.Entry(self)
         self.entry.pack(fill="x", pady=2)
@@ -26,11 +34,14 @@ class FromColumnForm(StepForm):
         self.entry.bind("<KeyRelease>", self._on_update)
 
     def _on_update(self, event=None):
+        """Persist current field values to step config."""
         self.step_config["column"] = self.entry.get()
         self._notify_change()
 
 class ConstForm(StepForm):
+    """Form for `const` operation."""
     def _create_widgets(self):
+        """Render constant-value input."""
         ttk.Label(self, text="Constant Value:").pack(anchor="w")
         self.entry = ttk.Entry(self)
         self.entry.pack(fill="x", pady=2)
@@ -40,11 +51,14 @@ class ConstForm(StepForm):
         self.entry.bind("<KeyRelease>", self._on_update)
 
     def _on_update(self, event=None):
+        """Persist current field values to step config."""
         self.step_config["value"] = self.entry.get()
         self._notify_change()
 
 class SQLForm(StepForm):
+    """Form for `sql` operation in expression/query mode."""
     def _create_widgets(self):
+        """Render SQL editor and mode controls."""
         ttk.Label(self, text="SQL Expression (DuckDB):").pack(anchor="w")
         
         self.text = tk.Text(self, height=5, font=("Courier", 12))
@@ -66,6 +80,7 @@ class SQLForm(StepForm):
         ttk.Radiobutton(frame, text="Full Query", variable=self.mode_var, value="query", command=self._on_update).pack(side="left")
 
     def _on_update(self, event=None):
+        """Persist current SQL content/mode to step config."""
         content = self.text.get("1.0", "end-1c")
         mode = self.mode_var.get()
         
@@ -77,7 +92,9 @@ class SQLForm(StepForm):
         self._notify_change()
 
 class CastForm(StepForm):
+    """Form for `cast` operation."""
     def _create_widgets(self):
+        """Render cast target-type selector."""
         ttk.Label(self, text="Target Type:").pack(anchor="w")
         self.type_var = tk.StringVar(value=self.step_config.get("to", "string"))
         cb = ttk.Combobox(self, textvariable=self.type_var, values=["string", "int", "float", "decimal", "datetime"])
@@ -85,10 +102,12 @@ class CastForm(StepForm):
         cb.bind("<<ComboboxSelected>>", self._on_update)
 
     def _on_update(self, event=None):
+        """Persist selected cast type to step config."""
         self.step_config["to"] = self.type_var.get()
         self._notify_change()
 
 def get_form_class(op_name):
+    """Return form class for an operation name."""
     # Mapping of op to form class
     mapping = {
         "from_column": FromColumnForm,

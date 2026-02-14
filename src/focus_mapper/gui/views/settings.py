@@ -8,6 +8,7 @@ from focus_mapper.gui.ui_utils import set_tooltip
 class SettingsView(ttk.Frame):
     """Render and persist advanced GUI settings."""
     def __init__(self, parent, app_context):
+        """Initialize settings view with app context."""
         super().__init__(parent)
         self.app = app_context
         self._create_ui()

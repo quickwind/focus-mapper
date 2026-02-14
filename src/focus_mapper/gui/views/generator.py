@@ -14,6 +14,7 @@ from focus_mapper.gui.ui_utils import set_tooltip, refresh_sort_headers, sort_tr
 class GeneratorView(ttk.Frame):
     """Generator screen to run mapping and inspect output preview."""
     def __init__(self, parent, app_context):
+        """Initialize generator view state and widgets."""
         super().__init__(parent)
         self.app = app_context
         self.mappings_dir = Path.home() / ".focus_mapper" / "mappings"

@@ -1,3 +1,5 @@
+"""Entrypoint for launching the Tkinter GUI application."""
+
 import sys
 
 def main():

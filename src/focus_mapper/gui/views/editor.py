@@ -1,3 +1,5 @@
+"""Interactive mapping editor view for creating and maintaining mapping YAML."""
+
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
 from tkinter import font as tkfont
@@ -19,6 +21,7 @@ from focus_mapper.gui.ui_utils import WidgetTooltip as _WidgetTooltip, set_toolt
 
 
 def _create_star(parent, tooltip: str, **pack_opts):
+    """Create a red required-star label with optional tooltip."""
     star = ttk.Label(parent, text="*", foreground="red")
     star._pack_opts = pack_opts
     star.pack(**pack_opts)
@@ -27,6 +30,7 @@ def _create_star(parent, tooltip: str, **pack_opts):
 
 
 def _set_star_visible(star, show: bool, tooltip: str | None = None):
+    """Show or hide required-star indicator and update tooltip text."""
     if star is None:
         return
     if tooltip:
@@ -39,13 +43,16 @@ def _set_star_visible(star, show: bool, tooltip: str | None = None):
 
 
 class _OpPicker:
+    """Modal operation picker with per-option tooltip descriptions."""
     def __init__(self, parent, options: list[str], descriptions: dict[str, str]):
+        """Initialize picker state and option catalog."""
         self.parent = parent
         self.options = options
         self.descriptions = descriptions
         self.result: str | None = None
 
     def show(self, title: str, current: str | None = None) -> str | None:
+        """Open picker modal and return selected operation name."""
         dialog = tk.Toplevel(self.parent)
         dialog.title(title)
         dialog.resizable(False, False)
@@ -105,6 +112,7 @@ class _OpPicker:
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge two dictionaries (override values win)."""
     out = dict(base)
     for k, v in override.items():
         if isinstance(v, dict) and isinstance(out.get(k), dict):
@@ -115,6 +123,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
 
 
 def _deep_diff(base: dict, modified: dict) -> dict:
+    """Return recursive diff map from `base` to `modified`."""
     diff: dict = {}
     for k, v in modified.items():
         if k not in base:
@@ -132,13 +141,16 @@ def _deep_diff(base: dict, modified: dict) -> dict:
 
 
 class _TreeTooltip:
+    """Floating tooltip tied to tree rows while hovering."""
     def __init__(self, widget: ttk.Treeview):
+        """Create tree-row tooltip controller."""
         self.widget = widget
         self.tip = None
         self.label = None
         self.current_iid = None
 
     def show(self, text: str, x: int, y: int, iid: str):
+        """Show tooltip text at screen coordinates for one row id."""
         if not text:
             self.hide()
             return
@@ -154,6 +166,7 @@ class _TreeTooltip:
         self.current_iid = iid
 
     def hide(self):
+        """Hide tooltip window and reset current row tracking."""
         if self.tip is not None:
             self.tip.destroy()
             self.tip = None
@@ -161,6 +174,7 @@ class _TreeTooltip:
         self.current_iid = None
 
 class MappingEditorView(ttk.Frame):
+    """Main mapping editor screen with column table and operation editor."""
     def __init__(
         self,
         parent,
@@ -170,6 +184,7 @@ class MappingEditorView(ttk.Frame):
         dataset_type=None,
         dataset_instance_name=None,
     ):
+        """Initialize editor state from existing mapping or template defaults."""
         super().__init__(parent)
         self.app = app_context
         self.file_path = file_path
@@ -199,6 +214,7 @@ class MappingEditorView(ttk.Frame):
         self.app.protocol("WM_DELETE_WINDOW", self._on_close_window)
 
     def _load_data(self):
+        """Load mapping file/spec and initialize mutable editor state."""
         if self.file_path and self.file_path.exists():
             try:
                 config = load_mapping_config(self.file_path)
@@ -246,6 +262,7 @@ class MappingEditorView(ttk.Frame):
             pass
 
     def _create_ui(self):
+        """Build editor toolbar, metadata header, and split-pane layout."""
         # Toolbar
         toolbar = ttk.Frame(self)
         toolbar.pack(fill="x", pady=5)
@@ -373,6 +390,7 @@ class MappingEditorView(ttk.Frame):
         # We'll dynamically populate right_frame based on selection
 
     def _populate_tree(self):
+        """Populate left columns table from spec plus configured rules."""
         # Merge spec columns and existing config
         mapped_cols = {k for k, v in self.rules_dict.items() if getattr(v, "steps", [])}
         spec_cols = set()
@@ -438,12 +456,14 @@ class MappingEditorView(ttk.Frame):
         self._autosize_columns_tree()
 
     def _setup_tree_sorting(self):
+        """Wire sortable headers for the columns tree."""
         for col in self.tree["columns"]:
             self.tree.heading(col, command=lambda c=col: self._sort_tree(c))
         self.tree.heading("#0", command=lambda: self._sort_tree("#0"))
         self._refresh_sort_headers()
 
     def _sort_tree(self, col: str):
+        """Sort columns tree rows by the selected table column."""
         items = []
         for iid in self.tree.get_children(""):
             if col == "#0":
@@ -462,6 +482,7 @@ class MappingEditorView(ttk.Frame):
         self._refresh_sort_headers()
 
     def _refresh_sort_headers(self):
+        """Refresh sort arrow indicators in columns tree headers."""
         arrow_up = " ▲"
         arrow_down = " ▼"
         columns = list(self.tree["columns"]) + ["#0"]
@@ -476,6 +497,7 @@ class MappingEditorView(ttk.Frame):
                 self.tree.heading(col, text=text + (arrow_down if is_desc else arrow_up))
 
     def _autosize_columns_tree(self):
+        """Auto-fit columns tree widths to visible content within bounds."""
         # Resize columns to content with max bounds so long text does not dominate layout.
         font = tkfont.nametofont("TkDefaultFont")
         bounds = {
@@ -503,6 +525,7 @@ class MappingEditorView(ttk.Frame):
             self.tree.column(col, width=max(min_w, min(width, max_w)))
 
     def _on_tree_hover(self, event):
+        """Show hovered column description tooltip in columns tree."""
         row_id = self.tree.identify_row(event.y)
         if not row_id:
             self._tree_tooltip.hide()
@@ -518,9 +541,11 @@ class MappingEditorView(ttk.Frame):
         self._tree_tooltip.show(desc, x, y, row_id)
 
     def _on_tree_leave(self, _event):
+        """Hide tree tooltip when pointer leaves tree widget."""
         self._tree_tooltip.hide()
 
     def on_column_select(self, event):
+        """Handle selection change and render selected column details."""
         selection = self.tree.selection()
         if not selection:
             return
@@ -530,6 +555,7 @@ class MappingEditorView(ttk.Frame):
         self._show_column_details(col_name)
 
     def _show_column_details(self, col_name):
+        """Render right-side editor panel for selected target column."""
         self._suppress_dirty = True
         # Clear right frame
         for widget in self.right_frame.winfo_children():
@@ -674,6 +700,7 @@ class MappingEditorView(ttk.Frame):
         self._suppress_dirty = False
 
     def _sort_preview_tree(self, column: str):
+        """Sort per-column preview table by selected column."""
         if not hasattr(self, "preview_tree"):
             return
         items = [(self.preview_tree.set(iid, column), iid) for iid in self.preview_tree.get_children("")]
@@ -693,6 +720,7 @@ class MappingEditorView(ttk.Frame):
         self._refresh_preview_sort_headers()
 
     def _refresh_preview_sort_headers(self):
+        """Refresh sort arrow indicators in preview table headers."""
         if not hasattr(self, "preview_tree"):
             return
         arrow_up = " ▲"
@@ -704,6 +732,7 @@ class MappingEditorView(ttk.Frame):
                 self.preview_tree.heading(col, text=label + (arrow_down if self._preview_sort_state[col] else arrow_up))
 
     def _autosize_preview_tree_columns(self):
+        """Auto-fit preview table column widths within configured bounds."""
         if not hasattr(self, "preview_tree"):
             return
         font = tkfont.nametofont("TkDefaultFont")
@@ -719,6 +748,7 @@ class MappingEditorView(ttk.Frame):
             self.preview_tree.column(col, width=max(min_w, min(width, max_w)))
 
     def _pick_operation_type(self, current: str | None = None) -> str | None:
+        """Open operation picker and return selected operation name."""
         options = [
             "from_column",
             "const",
@@ -752,6 +782,7 @@ class MappingEditorView(ttk.Frame):
         return picker.show("Add Operation", current=current)
 
     def _set_single_step(self, col_name: str, step: dict | None) -> None:
+        """Set (or clear) the single supported transformation step for target."""
         if col_name not in self.rules_dict:
             self.rules_dict[col_name] = MappingRule(target=col_name, steps=[])
         rule = self.rules_dict[col_name]
@@ -763,6 +794,7 @@ class MappingEditorView(ttk.Frame):
         self._set_status_for_column(col_name)
 
     def _update_rule_validation(self, col_name: str, validation: dict | None) -> None:
+        """Update per-column validation override in editor state."""
         rule = self.rules_dict.get(col_name)
         if not rule:
             rule = MappingRule(target=col_name, steps=[])
@@ -786,6 +818,7 @@ class MappingEditorView(ttk.Frame):
         self.mark_dirty()
 
     def _update_rule_meta(self, col_name: str, data_type: str | None, description: str | None) -> None:
+        """Update extension rule metadata fields."""
         rule = self.rules_dict.get(col_name)
         if not rule:
             rule = MappingRule(target=col_name, steps=[])
@@ -803,6 +836,7 @@ class MappingEditorView(ttk.Frame):
         self.mark_dirty()
 
     def _update_rule_nullable(self, col_name: str, allow_nulls: bool) -> None:
+        """Update nullable override for extension rule and table display."""
         rule = self.rules_dict.get(col_name)
         if not rule:
             rule = MappingRule(target=col_name, steps=[])
@@ -821,6 +855,7 @@ class MappingEditorView(ttk.Frame):
             self.tree.set(col_name, "nullable", "Yes" if allow_nulls else "No")
         self.mark_dirty()
     def _edit_validation_dialog(self, title: str, initial: dict | None, data_type: str | None = None, allow_remove: bool = False) -> dict | None:
+        """Open validation editor dialog and return updated settings payload."""
         dialog = tk.Toplevel(self)
         dialog.title(title)
         dialog.geometry("620x700")
@@ -1162,6 +1197,7 @@ class MappingEditorView(ttk.Frame):
         return result[0]
 
     def on_edit_validation_defaults(self):
+        """Open dialog to edit global validation defaults."""
         updated = self._edit_validation_dialog("Validation Defaults", self.validation_defaults)
         if updated is None:
             return
@@ -1169,6 +1205,7 @@ class MappingEditorView(ttk.Frame):
         self.mark_dirty()
 
     def on_edit_column_validation(self, col_name: str):
+        """Open dialog to edit validation override for one target column."""
         rule = self.rules_dict.get(col_name)
         current = rule.validation if rule else None
         data_type = None
@@ -1195,6 +1232,7 @@ class MappingEditorView(ttk.Frame):
         self._update_rule_validation(col_name, diff or None)
 
     def _validate_const_json_value(self, raw: str, spec_col):
+        """Validate JSON const value against generic/spec-specific format rules."""
         text = (raw or "").strip()
         if not text:
             return False, "Required", False
@@ -1219,6 +1257,7 @@ class MappingEditorView(ttk.Frame):
         return True, "", False
 
     def _is_step_valid(self, col_name: str, step: dict | None, spec_col) -> bool:
+        """Validate one configured step for UI status and save eligibility."""
         if not step or not isinstance(step, dict):
             return False
         op = step.get("op")
@@ -1318,6 +1357,7 @@ class MappingEditorView(ttk.Frame):
         return False
 
     def _render_op_config(self, parent, col_name: str, step: dict, spec_col) -> None:
+        """Render operation-specific configuration controls for selected column."""
         for w in parent.winfo_children():
             w.destroy()
 
@@ -1960,6 +2000,7 @@ class MappingEditorView(ttk.Frame):
             return
 
     def _status_for_column(self, col_name: str) -> tuple[str, tuple[str, ...]]:
+        """Compute display status/tags for one target row in columns table."""
         spec_col = self.spec.get_column(col_name) if self.spec else None
         step = None
         if col_name in self.rules_dict and getattr(self.rules_dict[col_name], "steps", []):
@@ -1974,6 +2015,7 @@ class MappingEditorView(ttk.Frame):
         return status, ()
 
     def _set_status_for_column(self, col_name: str) -> None:
+        """Update one row status/tags in columns table."""
         status, tags = self._status_for_column(col_name)
         if self.tree.exists(col_name):
             self.tree.set(col_name, "status", status)
@@ -1987,6 +2029,7 @@ class MappingEditorView(ttk.Frame):
         initial_step: dict | None = None,
         nullable: bool | None = None,
     ):
+        """Create a new rule object for a target and open its editor panel."""
         # Create a new MappingRule
         # Since MappingRule is frozen, we might need a mutable proxy or just recreate it on save/update?
         # Actually, MappingRule.steps is a list[dict]. The list itself is mutable!
@@ -2010,6 +2053,7 @@ class MappingEditorView(ttk.Frame):
         self._show_column_details(col_name)
 
     def on_load_sample_data(self):
+        """Load sample source data to enable pickers and transformation preview."""
         path = filedialog.askopenfilename(
             title="Load Sample Data (CSV/Parquet)",
             filetypes=[("Data files", "*.csv *.parquet"), ("All files", "*.*")],
@@ -2027,6 +2071,7 @@ class MappingEditorView(ttk.Frame):
             messagebox.showerror("Error", f"Failed to load data: {e}", parent=self)
 
     def _update_preview(self, col_name: str, step: dict | None):
+        """Refresh transformation preview table for current column/step."""
         if not hasattr(self, "preview_tree"):
             return
         # Clear
@@ -2085,6 +2130,7 @@ class MappingEditorView(ttk.Frame):
             self.preview_error.config(text=str(e))
 
     def _run_preview_test(self, col_name: str, step: dict | None):
+        """Execute explicit dry-run preview for SQL/pandas_expr steps."""
         if self.sample_df is None:
             messagebox.showwarning("No Sample Data", "Load sample data first.", parent=self)
             return
@@ -2121,10 +2167,12 @@ class MappingEditorView(ttk.Frame):
             self.wait_window(dialog)
 
     def _update_save_state(self):
+        """Enable/disable save button based on editor dirty state."""
         if hasattr(self, "save_btn"):
             self.save_btn.configure(state="normal" if self.dirty else "disabled")
 
     def _confirm_discard(self) -> bool:
+        """Prompt before discarding unsaved changes."""
         if not self.dirty:
             return True
         return messagebox.askyesno(
@@ -2134,10 +2182,12 @@ class MappingEditorView(ttk.Frame):
         )
 
     def _on_close_window(self):
+        """Handle top-level close event with unsaved-changes guard."""
         if self._confirm_discard():
             self.app.destroy()
 
     def mark_dirty(self):
+        """Mark editor as dirty and refresh save button state."""
         if self._suppress_dirty:
             return
         if not self.dirty:
@@ -2145,6 +2195,7 @@ class MappingEditorView(ttk.Frame):
             self._update_save_state()
 
     def _infer_extension_type(self, col_name: str) -> str:
+        """Infer extension data type from loaded sample column dtype/values."""
         if self.sample_df is None or col_name not in self.sample_df.columns:
             return "String"
         series = self.sample_df[col_name]
@@ -2172,6 +2223,7 @@ class MappingEditorView(ttk.Frame):
         return "String"
 
     def _prompt_extension_column(self):
+        """Prompt for extension column metadata and optional source mapping."""
         dialog = tk.Toplevel(self)
         dialog.title("New Extension Column")
         dialog.resizable(False, False)
@@ -2263,6 +2315,7 @@ class MappingEditorView(ttk.Frame):
         return result["value"]
 
     def on_add_column(self):
+        """Add extension column rule via metadata prompt workflow."""
         result = self._prompt_extension_column()
         if not result:
             return
@@ -2297,6 +2350,7 @@ class MappingEditorView(ttk.Frame):
             self.tree.selection_set(name)
 
     def on_save(self):
+        """Validate editor state and persist mapping YAML to disk."""
         name = (self.name_var.get() or "").strip()
         if not name:
             messagebox.showwarning("Missing Name", "Please enter a mapping name.", parent=self)
@@ -2375,6 +2429,7 @@ class MappingEditorView(ttk.Frame):
         messagebox.showinfo("Saved", f"Mapping saved to {self.file_path.name}", parent=self)
 
     def on_back(self):
+        """Return to mappings view, confirming discard if editor is dirty."""
         if not self._confirm_discard():
             return
         self.app.show_mappings_view()

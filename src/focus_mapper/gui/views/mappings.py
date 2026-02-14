@@ -17,6 +17,7 @@ from focus_mapper.gui.ui_utils import (
 class MappingsListView(ttk.Frame):
     """Mappings list screen with CRUD/import/export actions."""
     def __init__(self, parent, app_context):
+        """Initialize mappings list view and load table data."""
         super().__init__(parent)
         self.app = app_context
         self.mappings_dir = Path.home() / ".focus_mapper" / "mappings"

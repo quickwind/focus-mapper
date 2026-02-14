@@ -14,6 +14,7 @@ from focus_mapper.gui.ui_utils import (
 class ReportView(ttk.Frame):
     """Display validation summary and findings for one generation run."""
     def __init__(self, parent, app_context, report_path=None, report_data=None, back_view=None):
+        """Initialize report view from file path or in-memory report payload."""
         super().__init__(parent)
         self.app = app_context
         self.report_data = report_data

@@ -45,6 +45,7 @@ class ValidationFinding:
     sample_values: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize finding payload to JSON-friendly dictionary."""
         return {
             "check_id": self.check_id,
             "severity": self.severity,
@@ -63,6 +64,7 @@ class ValidationReport:
     spec_version: str
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize report payload to JSON-friendly dictionary."""
         return {
             "spec_version": self.spec_version,
             "summary": {
