@@ -1,3 +1,5 @@
+"""Validation engine for FOCUS datasets with override-aware checks."""
+
 from __future__ import annotations
 
 import json
@@ -27,12 +29,14 @@ from .format_validators import (
 
 @dataclass(frozen=True)
 class ValidationSummary:
+    """Aggregate validation counters."""
     errors: int
     warnings: int
 
 
 @dataclass(frozen=True)
 class ValidationFinding:
+    """One validation issue or warning captured during validation."""
     check_id: str
     severity: str  # INFO/WARN/ERROR
     message: str
@@ -53,6 +57,7 @@ class ValidationFinding:
 
 @dataclass(frozen=True)
 class ValidationReport:
+    """Validation output containing summary and all findings."""
     summary: ValidationSummary
     findings: list[ValidationFinding]
     spec_version: str
@@ -498,6 +503,7 @@ def validate_focus_dataframe(
 
 
 def default_validation_settings() -> dict:
+    """Return baseline validation defaults shared across entrypoints."""
     return {
         "mode": "permissive",
         "datetime": {"format": None},
@@ -830,6 +836,7 @@ def _validate_string(
     allow_empty: bool | None,
     trim: bool | None,
 ) -> None:
+    """Validate string length/emptiness rules with optional trimming."""
     if (
         min_length is None
         and max_length is None
@@ -891,6 +898,7 @@ def _validate_string(
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge dictionaries with override precedence."""
     out = dict(base)
     for k, v in override.items():
         if k in out and isinstance(out.get(k), dict) and isinstance(v, dict):

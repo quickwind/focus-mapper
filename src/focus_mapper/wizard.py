@@ -1,3 +1,5 @@
+"""Interactive wizard for creating/updating mapping configurations."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -36,6 +38,7 @@ from .validate import default_validation_settings
 
 @dataclass(frozen=True)
 class WizardResult:
+    """Final wizard output and list of selected spec targets."""
     mapping: MappingConfig
     selected_targets: list[str]
 
@@ -52,6 +55,7 @@ def run_wizard(
     resume_config: MappingConfig | None = None,
     save_callback: Callable[[MappingConfig], None] | None = None,
 ) -> WizardResult:
+    """Drive full interactive wizard flow and return resulting mapping."""
     columns = list(input_df.columns)
     normalized = {_norm(c): c for c in columns}
 
@@ -207,6 +211,7 @@ def _select_targets(
     include_recommended: bool,
     include_conditional: bool,
 ) -> list[FocusColumnSpec]:
+    """Select target columns based on configured feature-level switches."""
     targets: list[FocusColumnSpec] = []
     for col in spec.columns:
         level = col.feature_level.strip().lower()
@@ -229,6 +234,7 @@ def _prompt_for_steps(
     prompt: PromptFunc,
     sample_df: pd.DataFrame | None = None,
 ) -> list[dict]:
+    """Prompt mapping operation(s) for one target column."""
     header = f"{'=' * 50}\nTarget column: \n\t{target.name} ({target.feature_level})"
     if target.data_type:
         header += f"\n\n\tData Type: {target.data_type}"
@@ -512,6 +518,7 @@ def _prompt_extension_columns(
     ask_validation_overrides: bool = True,
     sample_df: pd.DataFrame | None = None,
 ) -> list[MappingRule]:
+    """Prompt user to add extension column mapping rules."""
     # If existing_targets provided, we assume we might be resuming.
     # Spec says: "ask for extensions".
     
@@ -641,6 +648,7 @@ def _prompt_extension_columns(
 def _pick_column(
     columns: list[str], *, prompt: PromptFunc, suggested: str | None
 ) -> str:
+    """Interactively choose one source column."""
     if suggested and suggested in columns:
         use = prompt(f"Use suggested column '{suggested}'? [Y/n] ").strip().lower()
         if use in {"", "y", "yes"}:
@@ -657,6 +665,7 @@ def _pick_column(
 def _pick_columns(
     columns: list[str], *, prompt: PromptFunc, suggested: str | None
 ) -> list[str]:
+    """Interactively choose multiple source columns."""
     if suggested and suggested in columns:
         use = (
             prompt(f"Use suggested column '{suggested}' as first? [Y/n] ")
@@ -682,6 +691,7 @@ def _pick_columns(
 
 
 def _suggest_column(target: str, normalized: dict[str, str]) -> str | None:
+    """Suggest best-effort source column match for target name."""
     key = _norm(target)
     if key in normalized:
         return normalized[key]
@@ -693,6 +703,7 @@ def _suggest_column(target: str, normalized: dict[str, str]) -> str | None:
 
 
 def _prompt_validation_defaults(*, prompt: PromptFunc) -> dict:
+    """Prompt for global validation defaults used in mapping output."""
     defaults = _default_validation_settings()
     summary = (
         "Default validation settings:\n"
@@ -767,12 +778,14 @@ def _prompt_validation_defaults(*, prompt: PromptFunc) -> dict:
 
 
 def _default_validation_settings() -> dict:
+    """Return baseline validation defaults used by wizard prompts."""
     return default_validation_settings()
 
 
 def _prompt_column_validation(
     *, target_name: str, data_type: str | None, prompt: PromptFunc
 ) -> dict | None:
+    """Prompt optional per-column validation overrides."""
     use = prompt(f"Override validation for {target_name}? [y/N] ").strip().lower()
     if use not in {"y", "yes"}:
         return None
@@ -864,6 +877,7 @@ def _prompt_column_validation(
 def _maybe_append_cast(
     *, steps: list[dict], data_type: str | None, numeric_scale: int | None
 ) -> list[dict]:
+    """Append cast operation when target datatype requires coercion."""
     if not data_type or not steps:
         return steps
     if steps[-1].get("op") == "cast":
@@ -888,6 +902,7 @@ def _maybe_append_cast(
 
 
 def _prompt_int(prompt: PromptFunc, text: str) -> int | None:
+    """Prompt for optional integer input."""
     while True:
         value = prompt(text).strip()
         if value == "":
@@ -899,6 +914,7 @@ def _prompt_int(prompt: PromptFunc, text: str) -> int | None:
 
 
 def _prompt_bool(prompt: PromptFunc, text: str, *, default: bool | None) -> bool | None:
+    """Prompt for optional yes/no input."""
     while True:
         value = prompt(text).strip().lower()
         if value == "":
@@ -918,6 +934,7 @@ def _prompt_choice(
     default: str | None,
     allow_empty: bool = False,
 ) -> str | None:
+    """Prompt for one value from a predefined choice set."""
     while True:
         value = prompt(text).strip().lower()
         if value == "":
@@ -934,6 +951,7 @@ def _prompt_choice(
 
 
 def _prompt_decimal(prompt: PromptFunc, text: str) -> Decimal | None:
+    """Prompt for optional decimal number input."""
     while True:
         value = prompt(text).strip()
         if value == "":
@@ -945,6 +963,7 @@ def _prompt_decimal(prompt: PromptFunc, text: str) -> Decimal | None:
 
 
 def _prompt_datetime_format(prompt: PromptFunc, text: str) -> str | None:
+    """Prompt for optional datetime format template."""
     while True:
         value = prompt(text).strip()
         if value == "":
@@ -1021,4 +1040,5 @@ def _validate_const_value(
 
 
 def _norm(value: str) -> str:
+    """Normalize text for fuzzy matching logic."""
     return "".join(ch for ch in value.lower() if ch.isalnum() or ch == "_")

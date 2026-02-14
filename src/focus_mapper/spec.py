@@ -1,3 +1,5 @@
+"""FOCUS specification loading, listing, and dtype coercion helpers."""
+
 from __future__ import annotations
 
 import json
