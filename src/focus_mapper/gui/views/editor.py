@@ -2431,6 +2431,16 @@ class MappingEditorView(ttk.Frame):
         if source_column:
             initial_step = {"op": "from_column", "column": source_column}
         if name not in self.rules_dict:
+            # Insert tree row first so _set_status_for_column can find it
+            nullable_display = "Yes" if nullable else "No"
+            self.tree.insert(
+                "",
+                "end",
+                iid=name,
+                text=name,
+                values=("-", "Extension", data_type or "-", nullable_display),
+            )
+            self._col_descriptions[name] = description or ""
             self.create_rule(
                 name,
                 data_type=data_type,
@@ -2438,19 +2448,9 @@ class MappingEditorView(ttk.Frame):
                 initial_step=initial_step,
                 nullable=nullable,
             )
-            # Add to tree
-            status, tags = self._status_for_column(name)
-            nullable_display = "Yes" if nullable else "No"
-            self.tree.insert(
-                "",
-                "end",
-                iid=name,
-                text=name,
-                values=(status, "Extension", data_type or "-", nullable_display),
-                tags=tags,
-            )
-            self._col_descriptions[name] = description or ""
+            # Select and scroll into view
             self.tree.selection_set(name)
+            self.tree.see(name)
 
     def on_save(self):
         """Validate editor state and persist mapping YAML to disk."""
