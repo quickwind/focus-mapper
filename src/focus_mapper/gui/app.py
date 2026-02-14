@@ -48,6 +48,7 @@ class App(tk.Tk):
         # Navigation Buttons
         ttk.Button(self.nav_frame, text="Mappings", command=self.show_mappings_view).pack(fill="x", pady=5)
         ttk.Button(self.nav_frame, text="Generator", command=self.show_generator_view).pack(fill="x", pady=5)
+        ttk.Button(self.nav_frame, text="Validator", command=self.show_validator_view).pack(fill="x", pady=5)
         
         ttk.Separator(self.nav_frame, orient="horizontal").pack(fill="x", pady=20)
         ttk.Button(self.nav_frame, text="Settings", command=self.show_settings_view).pack(fill="x", pady=5)
@@ -83,6 +84,19 @@ class App(tk.Tk):
         self._clear_content()
         from focus_mapper.gui.views.generator import GeneratorView
         self.current_view = GeneratorView(self.content_frame, self)
+        self.current_view.pack(fill="both", expand=True)
+
+    def show_validator_view(self):
+        """Open validator view, reusing existing instance when available."""
+        if self.current_view and self.current_view.__class__.__name__ == "ValidatorView":
+            return
+        for widget in self.content_frame.winfo_children():
+            if widget.__class__.__name__ == "ValidatorView":
+                self._show_existing_view(widget)
+                return
+        self._clear_content()
+        from focus_mapper.gui.views.validator import ValidatorView
+        self.current_view = ValidatorView(self.content_frame, self)
         self.current_view.pack(fill="both", expand=True)
 
     def show_settings_view(self):

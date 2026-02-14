@@ -7,14 +7,15 @@ Generate FinOps FOCUS compliant reports from a pre-flattened billing data.
 
 This project takes any tabular data (CSV/Parquet) and converts it to a FOCUS compliant report using a YAML mapping.
 You can build mappings via:
-- CLI mapping wizard (interactive prompts + previews)
-- Desktop GUI (Tkinter) for managing mappings and running generation/validation with previews
+- CLI mapping wizard (interactive prompts)
+- Desktop GUI (for managing mappings and running generation/validation with previews
 
 
 ## Table of Contents
 
 - [General Description](#general-description)
 - [Functionalities](#functionalities)
+- [Architecture](#architecture)
 - [Usage](#usage)
   - [Install](#install)
   - [What You Need](#what-you-need)
@@ -39,12 +40,12 @@ You can build mappings via:
 
 ## General Description
 
-`focus-mapper` turns a “source” dataset (your billing/telemetry exports) into a FOCUS dataset by applying a mapping YAML.
-It can also validate an existing FOCUS dataset and produce a machine-readable validation report.
+`focus-mapper` turns a “source” dataset (your billing reports data) into a FOCUS dataset by applying a mapping YAML.
+It can also validate an existing FOCUS dataset and produce a validation report.
 
 ## Functionalities
 
-- Generate FOCUS dataset from source + mapping (CSV/Parquet) with sidecar metadata (v1.3+) and validation report output.
+- Generate FOCUS dataset from source (CSV/Parquet) + mapping (YAML) with sidecar metadata and validation report output.
 - Validate an existing FOCUS dataset.
 - Validate mapping YAML before using it (catch config/spec issues early).
 - Build mappings interactively via the CLI wizard.
@@ -53,6 +54,48 @@ It can also validate an existing FOCUS dataset and produce a machine-readable va
   - Mapping editor with spec-aware column help, operation configuration, previews, and validation configuration UI
   - Generator output preview (first 100 rows), logs/progress, and a validation report viewer
   - Persistent settings (e.g., external spec directory for dev/testing)
+
+## Architecture
+
+```mermaid
+flowchart TD
+    subgraph Inputs
+        SD[Source Data<br/>(CSV/Parquet)]
+        FS[FOCUS Spec]
+    end
+
+    subgraph User_Flows [User Workflows]
+        Wizard[Mapping Wizard<br/>(CLI)]
+        Runner[Runner<br/>(CLI / GUI / Lib)]
+    end
+
+    subgraph Artifacts
+        MY[Mapping YAML]
+        FD[FOCUS Dataset]
+        MD[Metadata]
+        VR[Validation Report]
+    end
+
+    subgraph Engine
+        GEN[Generator]
+        VAL[Validator]
+    end
+
+    SD -.-> Wizard
+    Wizard --> MY
+    
+    SD --> Runner
+    MY --> Runner
+    FS --> Runner
+    
+    Runner --> GEN
+    GEN --> FD
+    GEN --> MD
+    GEN --> VAL
+    
+    FS --> VAL
+    VAL --> VR
+```
 
 ## Usage
 
