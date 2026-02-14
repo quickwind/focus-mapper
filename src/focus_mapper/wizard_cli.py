@@ -1,3 +1,5 @@
+"""CLI wrapper for the interactive mapping wizard."""
+
 from __future__ import annotations
 
 import argparse
@@ -18,6 +20,7 @@ logger = logging.getLogger("focus_mapper.wizard")
 
 
 def _path(p: str) -> Path:
+    """Expand user path input to a Path object."""
     return Path(p).expanduser()
 
 
@@ -31,10 +34,12 @@ def _prompt_input_path(prompt: PromptFunc) -> Path:
 
 
 def _eprint(message: str) -> None:
+    """Print warning/error text to stderr."""
     print(message, file=sys.stderr)
 
 
 def _setup_logging(level_name: str) -> None:
+    """Configure logging for wizard CLI execution."""
     level = getattr(logging, level_name.upper(), logging.INFO)
     logging.basicConfig(
         level=level,
@@ -44,6 +49,7 @@ def _setup_logging(level_name: str) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build argument parser for `focus-mapper-wizard`."""
     p = argparse.ArgumentParser(prog="focus-mapper-wizard")
     p.add_argument(
         "--log-level",
@@ -78,6 +84,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _write_mapping(path: Path, mapping: MappingConfig) -> None:
+    """Serialize mapping config to YAML with stable field layout."""
     data: dict[str, object] = {
         "spec_version": mapping.spec_version,
         "mappings": {},
@@ -116,6 +123,7 @@ def _write_mapping(path: Path, mapping: MappingConfig) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Wizard CLI entrypoint with resume flow and incremental saves."""
     parser = _build_parser()
     args = parser.parse_args(argv)
 
