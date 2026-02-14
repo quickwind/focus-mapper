@@ -59,42 +59,59 @@ It can also validate an existing FOCUS dataset and produce a validation report.
 
 ```mermaid
 flowchart TD
-    subgraph Inputs
-        SD[Source Data<br/>(CSV/Parquet)]
-        FS[FOCUS Spec]
+    %% Define styles
+    classDef file fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef tool fill:#fff3e0,stroke:#ff6f00,stroke-width:2px;
+    classDef artifact fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+
+    %% Subgraphs
+    subgraph Input_Files [Inputs]
+        Sample["Sample Data<br/>(CSV/Parquet)"]:::file
+        Source["Source Data<br/>(CSV/Parquet)"]:::file
+        Spec["FOCUS Spec<br/>(Built-in / Custom)"]:::file
+        ExistingFocus["Existing FOCUS Data<br/>(CSV/Parquet)"]:::file
     end
 
-    subgraph User_Flows [User Workflows]
-        Wizard[Mapping Wizard<br/>(CLI)]
-        Runner[Runner<br/>(CLI / GUI / Lib)]
+    subgraph Tools ["focus-mapper (CLI / GUI)"]
+        direction TB
+        Wizard["Mapping Wizard<br/>(Create/Edit Mapping)"]:::tool
+        Generator["Generator Mode<br/>(Generate Data)"]:::tool
+        Validator["Validator Mode<br/>(Validate Data)"]:::tool
     end
 
-    subgraph Artifacts
-        MY[Mapping YAML]
-        FD[FOCUS Dataset]
-        MD[Metadata]
-        VR[Validation Report]
+    subgraph Output_Artifacts [Outputs]
+        direction TB
+        YAML["Mapping YAML"]:::artifact
+        FD["FOCUS Dataset<br/>(CSV/Parquet)"]:::artifact
+        Meta["Metadata JSON"]:::artifact
+        Report["Validation Report JSON"]:::artifact
     end
 
-    subgraph Engine
-        GEN[Generator]
-        VAL[Validator]
-    end
+    %% -- Vertical Ordering Enforcement --
+    %% Invisible links (~~~) help the layout engine place blocks top-to-bottom
+    Sample ~~~ Wizard
+    Wizard ~~~ YAML
+    YAML ~~~ Generator
+    Generator ~~~ FD
 
-    SD -.-> Wizard
-    Wizard --> MY
+    %% -- Flow 1: Wizard --
+    Sample -->|1| Wizard
+    Spec -->|1| Wizard
+    Wizard -->|2| YAML
+
+    %% -- Flow 2: Generator --
+    Source -->|3| Generator
+    YAML -->|3| Generator
+    Generator -->|4| FD
+    Generator -->|4| Meta
+    Generator -->|4| Report
+
+    %% -- Flow 3: Validator --
+    ExistingFocus -->|5| Validator
+    Validator -->|6| Report
     
-    SD --> Runner
-    MY --> Runner
-    FS --> Runner
-    
-    Runner --> GEN
-    GEN --> FD
-    GEN --> MD
-    GEN --> VAL
-    
-    FS --> VAL
-    VAL --> VR
+    %% Implicit validation
+    FD -.-> Validator
 ```
 
 ## Usage
