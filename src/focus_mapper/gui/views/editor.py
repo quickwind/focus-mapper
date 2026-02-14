@@ -10,6 +10,10 @@ from focus_mapper.io import read_table
 from focus_mapper.mapping.ops import apply_steps
 from focus_mapper.validate import default_validation_settings
 from focus_mapper.mapping.config import load_mapping_config, MappingConfig, MappingRule
+from focus_mapper.format_validators import (
+    validate_key_value_format,
+    validate_json_object_format,
+)
 
 
 class _WidgetTooltip:
@@ -1153,6 +1157,30 @@ class MappingEditorView(ttk.Frame):
         diff = _deep_diff(base, updated or {})
         self._update_rule_validation(col_name, diff or None)
 
+    def _validate_const_json_value(self, raw: str, spec_col):
+        text = (raw or "").strip()
+        if not text:
+            return False, "Required", False
+        try:
+            json.loads(text)
+        except Exception as e:
+            return False, f"Invalid JSON: {e}", False
+
+        value_format = ""
+        if spec_col and getattr(spec_col, "value_format", None):
+            value_format = str(spec_col.value_format).strip().lower()
+
+        if "key-value" in value_format or "keyvalue" in value_format:
+            ok, msg = validate_key_value_format(text)
+            return ok, (msg or ""), False
+        if "json object" in value_format or "jsonobject" in value_format:
+            ok, msg = validate_json_object_format(text)
+            # CLI treats warnings as valid input for wizard.
+            if ok and msg and "warning" in msg.lower():
+                return True, msg, True
+            return ok, (msg or ""), False
+        return True, "", False
+
     def _is_step_valid(self, col_name: str, step: dict | None, spec_col) -> bool:
         if not step or not isinstance(step, dict):
             return False
@@ -1184,10 +1212,13 @@ class MappingEditorView(ttk.Frame):
                 and spec_col.data_type.strip().lower() == "json"
             ):
                 if isinstance(value, (dict, list)):
-                    return True
+                    value_str = json.dumps(value)
+                    ok, _, _ = self._validate_const_json_value(value_str, spec_col)
+                    return ok
                 try:
-                    parsed = json.loads(str(value or "").strip())
-                    return isinstance(parsed, (dict, list))
+                    value_str = str(value or "").strip()
+                    ok, _, _ = self._validate_const_json_value(value_str, spec_col)
+                    return ok
                 except Exception:
                     return False
             return bool(str(value or "").strip())
@@ -1473,6 +1504,8 @@ class MappingEditorView(ttk.Frame):
                 )
                 row = ttk.Frame(parent)
                 row.pack(fill="both", pady=(0, 6))
+                btns = ttk.Frame(row)
+                btns.pack(side="right", padx=(6, 0), anchor="n")
                 text = tk.Text(row, height=6, wrap="word")
                 text.pack(side="left", fill="x", expand=True)
                 input_star = _create_star(row, "Required", side="left", padx=(6, 0))
@@ -1488,30 +1521,42 @@ class MappingEditorView(ttk.Frame):
 
                 def on_json_change(_event=None):
                     raw = text.get("1.0", "end").strip()
-                    if not raw:
-                        step["value"] = None
-                        _set_star_visible(label_star, True, "Required")
-                        _set_star_visible(input_star, True, "Required")
-                        error_lbl.config(text="")
-                        self.mark_dirty()
-                        self._set_status_for_column(col_name)
-                        self._update_preview(col_name, step)
-                        return
                     try:
+                        ok, msg, is_warning = self._validate_const_json_value(raw, spec_col)
+                    except Exception as e:  # safety
+                        ok, msg, is_warning = False, f"Invalid JSON: {e}", False
+                    if ok:
                         parsed = json.loads(raw)
                         step["value"] = parsed
-                        _set_star_visible(label_star, False)
-                        _set_star_visible(input_star, False)
-                        error_lbl.config(text="")
-                    except Exception as e:
+                        _set_star_visible(label_star, False, "")
+                        _set_star_visible(input_star, False, "")
+                        if msg:
+                            error_lbl.config(text=msg, foreground="#b36b00" if is_warning else "#333333")
+                        else:
+                            error_lbl.config(text="", foreground="red")
+                    else:
                         step["value"] = raw
-                        _set_star_visible(label_star, True, "Invalid JSON")
-                        _set_star_visible(input_star, True, "Invalid JSON")
-                        error_lbl.config(text=f"Invalid JSON: {e}")
+                        _set_star_visible(label_star, True, msg or "Invalid JSON")
+                        _set_star_visible(input_star, True, msg or "Invalid JSON")
+                        error_lbl.config(text=msg or "Invalid JSON", foreground="red")
                     self.mark_dirty()
                     self._set_status_for_column(col_name)
                     self._update_preview(col_name, step)
 
+                def on_prettify():
+                    raw = text.get("1.0", "end").strip()
+                    if not raw:
+                        return
+                    try:
+                        obj = json.loads(raw)
+                        formatted = json.dumps(obj, indent=2)
+                        text.delete("1.0", "end")
+                        text.insert("1.0", formatted)
+                        on_json_change()
+                    except Exception as e:
+                        messagebox.showwarning("Invalid JSON", f"Cannot prettify invalid JSON:\n{e}", parent=self)
+
+                ttk.Button(btns, text="Prettify", width=10, command=on_prettify).pack(anchor="n")
                 _set_tooltip(text, "Enter a valid JSON object/array.")
                 text.bind("<KeyRelease>", on_json_change)
                 on_json_change()
