@@ -1,3 +1,5 @@
+"""Mapping execution pipeline from raw input data to FOCUS DataFrame."""
+
 from __future__ import annotations
 
 import logging

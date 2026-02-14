@@ -1,3 +1,5 @@
+"""I/O helpers for reading/writing CSV and Parquet tabular data."""
+
 from __future__ import annotations
 
 import csv
@@ -10,10 +12,12 @@ from .errors import ParquetUnavailableError
 
 
 def _suffix(path: Path) -> str:
+    """Return lowercase file suffix without leading dot."""
     return path.suffix.lower().lstrip(".")
 
 
 def read_table(path: Path, *, nrows: int | None = None) -> pd.DataFrame:
+    """Read CSV/Parquet input into a DataFrame with optional row limit."""
     suffix = _suffix(path)
     if suffix == "csv":
         return pd.read_csv(path, nrows=nrows)
@@ -34,6 +38,7 @@ def read_table(path: Path, *, nrows: int | None = None) -> pd.DataFrame:
 def write_table(
     df: pd.DataFrame, path: Path, *, parquet_metadata: dict[bytes, bytes] | None = None
 ) -> None:
+    """Write DataFrame to CSV/Parquet and optionally embed Parquet metadata."""
     suffix = _suffix(path)
     if suffix == "csv":
         # Ensure datetime columns are properly converted to UTC before formatting

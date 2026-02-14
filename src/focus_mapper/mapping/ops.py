@@ -1,3 +1,5 @@
+"""Atomic mapping operations used by the mapping execution engine."""
+
 from __future__ import annotations
 
 import ast
@@ -81,6 +83,7 @@ _DISALLOWED_PANDAS_NODES = (
 
 
 def _validate_pandas_expr(expr: str) -> None:
+    """Validate pandas expression AST against allowed names/calls."""
     try:
         tree = ast.parse(expr, mode="eval")
     except SyntaxError as e:
@@ -123,6 +126,7 @@ def _validate_pandas_expr(expr: str) -> None:
 def _eval_pandas_expr(
     expr: str, *, df: pd.DataFrame, current: pd.Series | None, target: str
 ) -> pd.Series:
+    """Evaluate pandas expression in a constrained environment and normalize output."""
     _validate_pandas_expr(expr)
 
     try:
