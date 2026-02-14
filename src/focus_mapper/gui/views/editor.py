@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
 from pathlib import Path
+import json
 import yaml
 import pandas as pd
 
@@ -1177,6 +1178,18 @@ class MappingEditorView(ttk.Frame):
                 return str(value) in allowed
             if allow_nullable_string:
                 return True
+            if (
+                spec_col
+                and spec_col.data_type
+                and spec_col.data_type.strip().lower() == "json"
+            ):
+                if isinstance(value, (dict, list)):
+                    return True
+                try:
+                    parsed = json.loads(str(value or "").strip())
+                    return isinstance(parsed, (dict, list))
+                except Exception:
+                    return False
             return bool(str(value or "").strip())
 
         if op == "null":
@@ -1452,6 +1465,56 @@ class MappingEditorView(ttk.Frame):
                 cb.bind("<Enter>", lambda _e: tip.show("Constant value (choose from allowed values)."))
                 cb.bind("<Leave>", lambda _e: tip.hide())
                 on_select()
+            elif data_type.strip().lower() == "json":
+                _, label_star, _ = add_label(
+                    label_hint,
+                    "Constant JSON value to use for all rows.",
+                    required=True,
+                )
+                row = ttk.Frame(parent)
+                row.pack(fill="both", pady=(0, 6))
+                text = tk.Text(row, height=6, wrap="word")
+                text.pack(side="left", fill="x", expand=True)
+                input_star = _create_star(row, "Required", side="left", padx=(6, 0))
+                error_lbl = ttk.Label(parent, text="", foreground="red")
+                error_lbl.pack(anchor="w", pady=(0, 6))
+
+                cur = step.get("value")
+                if cur is not None:
+                    if isinstance(cur, (dict, list)):
+                        text.insert("1.0", json.dumps(cur, indent=2))
+                    else:
+                        text.insert("1.0", str(cur))
+
+                def on_json_change(_event=None):
+                    raw = text.get("1.0", "end").strip()
+                    if not raw:
+                        step["value"] = None
+                        _set_star_visible(label_star, True, "Required")
+                        _set_star_visible(input_star, True, "Required")
+                        error_lbl.config(text="")
+                        self.mark_dirty()
+                        self._set_status_for_column(col_name)
+                        self._update_preview(col_name, step)
+                        return
+                    try:
+                        parsed = json.loads(raw)
+                        step["value"] = parsed
+                        _set_star_visible(label_star, False)
+                        _set_star_visible(input_star, False)
+                        error_lbl.config(text="")
+                    except Exception as e:
+                        step["value"] = raw
+                        _set_star_visible(label_star, True, "Invalid JSON")
+                        _set_star_visible(input_star, True, "Invalid JSON")
+                        error_lbl.config(text=f"Invalid JSON: {e}")
+                    self.mark_dirty()
+                    self._set_status_for_column(col_name)
+                    self._update_preview(col_name, step)
+
+                _set_tooltip(text, "Enter a valid JSON object/array.")
+                text.bind("<KeyRelease>", on_json_change)
+                on_json_change()
             else:
                 add_entry(
                     "value",
