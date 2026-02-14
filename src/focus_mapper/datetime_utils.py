@@ -1,3 +1,5 @@
+"""Utilities for normalizing and formatting timezone-aware datetime series."""
+
 from __future__ import annotations
 
 import pandas as pd

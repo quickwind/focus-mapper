@@ -1,3 +1,5 @@
+"""Readline-based tab completion helpers for CLI and wizard prompts."""
+
 from __future__ import annotations
 
 import glob
@@ -28,6 +30,7 @@ class PathCompleter:
     """
 
     def __call__(self, text: str, state: int) -> str | None:
+        """Return one completion candidate for the given readline state."""
         if state == 0:
             line = (
                 readline.get_line_buffer()
@@ -83,9 +86,11 @@ class ColumnCompleter:
     """Readline completer for column names (case-insensitive prefix match)."""
 
     def __init__(self, columns: list[str]) -> None:
+        """Initialize completer with available source column names."""
         self.columns = columns
 
     def __call__(self, text: str, state: int) -> str | None:
+        """Return one column completion candidate for current state."""
         if state == 0:
             needle = text.lower()
             self.matches = sorted(
@@ -101,9 +106,11 @@ class ValueCompleter:
     """Readline completer for allowed values (case-insensitive prefix match)."""
 
     def __init__(self, values: list[str]) -> None:
+        """Initialize completer with allowed value list."""
         self.values = values
 
     def __call__(self, text: str, state: int) -> str | None:
+        """Return one value completion candidate for current state."""
         if state == 0:
             needle = text.lower()
             self.matches = sorted(

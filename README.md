@@ -3,11 +3,120 @@
 ![CI](https://github.com/quickwind/focus-mapper/actions/workflows/ci.yml/badge.svg)
 [![Coverage](https://codecov.io/gh/quickwind/focus-mapper/branch/main/graph/badge.svg)](https://codecov.io/gh/quickwind/focus-mapper)
 
-Generate FinOps FOCUS compliant reports from a pre-flattened telemetry/billing table.
+Generate FinOps FOCUS compliant reports from a pre-flattened billing data.
 
-This project takes any tabular data (CSV/Parquet) and converts it to a FOCUS compliant report using a YAML mapping. Use the interactive wizard to build the mapping, or hand‑author it.
+This project takes any tabular data (CSV/Parquet) and converts it to a FOCUS compliant report using a YAML mapping.
+You can build mappings via:
+- CLI mapping wizard (interactive prompts)
+- Desktop GUI (for managing mappings and running generation/validation with previews
 
-## Quickstart
+
+## Table of Contents
+
+- [General Description](#general-description)
+- [Functionalities](#functionalities)
+- [Architecture](#architecture)
+- [Usage](#usage)
+  - [Install](#install)
+  - [What You Need](#what-you-need)
+  - [Generate (CLI)](#generate-cli)
+  - [Validate (CLI)](#validate-cli)
+  - [Mapping Wizard (CLI)](#mapping-wizard-cli)
+  - [Desktop GUI (Tkinter)](#desktop-gui-tkinter)
+  - [Use as a Library](#use-as-a-library)
+  - [High-Level API (Recommended)](#high-level-api-recommended)
+  - [Return Types](#return-types)
+  - [Exported Types](#exported-types)
+  - [Low-Level API](#low-level-api)
+- [Tech Details](#tech-details)
+  - [Supported Spec Versions](#supported-spec-versions)
+  - [Populate Spec Versions](#populate-spec-versions)
+  - [External Spec Directory (Dev/Test Only)](#external-spec-directory-devtest-only)
+  - [Data Generator Configuration](#data-generator-configuration)
+  - [v1.3 Metadata Support](#v13-metadata-support)
+  - [Mapping YAML Specification](#mapping-yaml-specification)
+  - [Tests](#tests)
+  - [Building for Windows](#building-for-windows)
+
+## General Description
+
+`focus-mapper` turns a “source” dataset (your billing reports data) into a FOCUS dataset by applying a mapping YAML.
+It can also validate an existing FOCUS dataset and produce a validation report.
+
+## Functionalities
+
+- Generate FOCUS dataset from source (CSV/Parquet) + mapping (YAML) with sidecar metadata and validation report output.
+- Validate an existing FOCUS dataset.
+- Validate mapping YAML before using it (catch config/spec issues early).
+- Build mappings interactively via the CLI wizard.
+- Manage/edit mappings and generate datasets via a Tkinter desktop GUI:
+  - Mapping list table with status and quick actions
+  - Mapping editor with spec-aware column help, operation configuration, previews, and validation configuration UI
+  - Generator output preview (first 100 rows), logs/progress, and a validation report viewer
+  - Persistent settings (e.g., external spec directory for dev/testing)
+
+## Architecture
+
+```mermaid
+flowchart TD
+    %% Define styles
+    classDef file fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef tool fill:#fff3e0,stroke:#ff6f00,stroke-width:2px;
+    classDef artifact fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+
+    %% Subgraphs
+    subgraph Input_Files [Inputs]
+        Sample["Sample Data<br/>(CSV/Parquet)"]:::file
+        Source["Source Data<br/>(CSV/Parquet)"]:::file
+        Spec["FOCUS Spec<br/>(Built-in / Custom)"]:::file
+        ExistingFocus["Existing FOCUS Data<br/>(CSV/Parquet)"]:::file
+    end
+
+    subgraph Tools ["focus-mapper (CLI / GUI)"]
+        direction TB
+        Wizard["Mapping Wizard<br/>(Create/Edit Mapping)"]:::tool
+        Generator["Generator Mode<br/>(Generate Data)"]:::tool
+        Validator["Validator Mode<br/>(Validate Data)"]:::tool
+    end
+
+    subgraph Output_Artifacts [Outputs]
+        direction TB
+        YAML["Mapping YAML"]:::artifact
+        FD["FOCUS Dataset<br/>(CSV/Parquet)"]:::artifact
+        Meta["Metadata JSON"]:::artifact
+        Report["Validation Report JSON"]:::artifact
+    end
+
+    %% -- Vertical Ordering Enforcement --
+    %% Invisible links (~~~) help the layout engine place blocks top-to-bottom
+    Sample ~~~ Wizard
+    Wizard ~~~ YAML
+    YAML ~~~ Generator
+    Generator ~~~ FD
+
+    %% -- Flow 1: Wizard --
+    Sample -->|1| Wizard
+    Spec -->|1| Wizard
+    Wizard -->|2| YAML
+
+    %% -- Flow 2: Generator --
+    Source -->|3| Generator
+    YAML -->|3| Generator
+    Generator -->|4| FD
+    Generator -->|4| Meta
+    Generator -->|4| Report
+
+    %% -- Flow 3: Validator --
+    ExistingFocus -->|5| Validator
+    Validator -->|6| Report
+    
+    %% Implicit validation
+    FD -.-> Validator
+```
+
+## Usage
+
+### Install
 
 ```bash
 pip install focus-mapper
@@ -21,84 +130,17 @@ pip install "focus-mapper[pandas15]"
 focus-mapper --help
 ```
 
-## Supported Spec Versions
-
-Default spec version is `v1.3`. Supported versions are `v1.1`, `v1.2`, and `v1.3`. `v1.0` is not supported.
-
-## Populate Spec Versions
-
-Use the tool below to download and store a specific spec version from the upstream repository:
-
-```bash
-python tools/populate_focus_spec.py --version 1.1
-python tools/populate_focus_spec.py --version 1.2
-python tools/populate_focus_spec.py --version 1.3
-```
-
-If a version tag doesn't exist, override the git ref:
-
-```bash
-python tools/populate_focus_spec.py --version 1.2 --ref main
-```
-
-Then use `--spec v1.2` (or `v1.1`, `v1.3`) in the CLI.
-
-## External Spec Directory
-
-You can override bundled specs with custom JSON files for testing or development:
-
-**Directory format:**
-```
-/path/to/specs/
-├── focus_spec_v1.1.json    # Override v1.1
-├── focus_spec_v1.2.json    # Override v1.2
-└── focus_spec_v1.3.json    # Override v1.3 (use as many as needed)
-```
-
-**Usage options (in priority order):**
-
-```bash
-# 1. CLI flag (highest priority)
-focus-mapper generate --spec v1.3 --spec-dir /path/to/specs ...
-
-# 2. Environment variable
-export FOCUS_SPEC_DIR=/path/to/specs
-focus-mapper generate --spec v1.3 ...
-
-# 3. Library API
-from focus_mapper import load_focus_spec
-spec = load_focus_spec("v1.3", spec_dir="/path/to/specs")
-```
-
-If a version isn't found in the external directory, it falls back to bundled specs.
-
-## Data Generator Configuration
-
-You can customize the `DataGenerator` metadata field (used in v1.3+) using environment variables. This is useful when wrapping `focus-mapper` in another tool.
-
-**Environment Variables:**
-
-- `FOCUS_DATA_GENERATOR_NAME`: Override the generator name (default: `focus-mapper`)
-- `FOCUS_DATA_GENERATOR_VERSION`: Override the generator version (default: library version)
-
-**Priority Order:**
-
-1. Explicit arguments (CLI `--data-generator` or API `generator_name`)
-2. Environment variables
-3. Default values
-
-## What You Need
+### What You Need
 
 - A flat input table (CSV or Parquet).
 - A mapping YAML that tells the tool how to create each FOCUS column.
 
 If you don't have a mapping yet, start with the wizard.
 
-## Generate
+### Generate (CLI)
 
 ```bash
 python -m focus_mapper generate \
-  --spec v1.2 \
   --input telemetry.csv \
   --mapping mapping.yaml \
   --output focus.csv \
@@ -106,12 +148,63 @@ python -m focus_mapper generate \
   --validation-out focus.validation.json
 ```
 
+Notes:
+- `--spec` is optional; by default the spec version comes from the mapping YAML.
+
 Outputs:
 - `focus.csv` (FOCUS report)
 - `focus.focus-metadata.json` (metadata)
 - `focus.validation.json` (validation report)
 
-## Use As A Library
+### Validate (CLI)
+
+```bash
+python -m focus_mapper validate \
+  --spec v1.2 \
+  --input focus.csv \
+  --out focus.validation.json
+```
+
+### Mapping Wizard (CLI)
+
+Interactive wizard to create a mapping YAML based on a sample input file:
+
+```bash
+focus-mapper-wizard \
+  --spec v1.2 \
+  --input telemetry.csv \
+  --output mapping.yaml
+```
+
+You can also run the wizard with no arguments and it will prompt for values:
+
+```bash
+focus-mapper-wizard
+```
+
+Optional flags:
+- `--include-recommended` to include Recommended columns
+- `--include-conditional` to include Conditional columns
+- `--include-optional` to include Optional columns
+
+Tip: column name prompts support tab‑completion (case‑insensitive).
+The wizard will also show a summary of default validation settings and let you override them globally or per column.
+For standard FOCUS columns, the wizard does not offer a `cast` option because the generator will coerce to the spec type automatically.
+
+### Desktop GUI (Tkinter)
+
+Launch the GUI:
+
+```bash
+python -m focus_mapper.gui.main
+```
+
+If Tkinter isn’t installed:
+- macOS (Homebrew): `brew install python-tk`
+- Linux (Debian/Ubuntu): `sudo apt-get install python3-tk`
+- Windows: reinstall Python and ensure “tcl/tk and IDLE” is checked
+
+### Use as a Library
 
 Install from PyPI:
 
@@ -213,7 +306,78 @@ Notes:
 - Supported specs: `v1.1`, `v1.2`, and `v1.3`. `v1.0` is not supported.
 - Validation overrides require passing `mapping` to `validate_focus_dataframe`.
 
-## v1.3 Metadata Support
+## Tech Details
+
+### Supported Spec Versions
+
+Default spec version is `v1.3`. Supported versions are `v1.1`, `v1.2`, and `v1.3`. `v1.0` is not supported.
+
+### Populate Spec Versions
+
+Use the tool below to download and store a specific spec version from the upstream repository:
+
+```bash
+python tools/populate_focus_spec.py --version 1.1
+python tools/populate_focus_spec.py --version 1.2
+python tools/populate_focus_spec.py --version 1.3
+```
+
+If a version tag doesn't exist, override the git ref:
+
+```bash
+python tools/populate_focus_spec.py --version 1.2 --ref main
+```
+
+Then use `--spec v1.2` (or `v1.1`, `v1.3`) in the CLI.
+
+### External Spec Directory (Dev/Test Only)
+
+You can override bundled specs with custom JSON files for testing or spec development (not recommended for production use).
+
+**Directory format:**
+```
+/path/to/specs/
+├── focus_spec_v1.1.json    # Override v1.1
+├── focus_spec_v1.2.json    # Override v1.2
+└── focus_spec_v1.3.json    # Override v1.3 (use as many as needed)
+```
+
+**Usage options (in priority order):**
+
+```bash
+# 1. CLI flag (highest priority)
+focus-mapper generate --spec v1.3 --spec-dir /path/to/specs ...
+
+# 2. Environment variable
+export FOCUS_SPEC_DIR=/path/to/specs
+focus-mapper generate --spec v1.3 ...
+
+# 3. Library API
+from focus_mapper import load_focus_spec
+spec = load_focus_spec("v1.3", spec_dir="/path/to/specs")
+```
+
+GUI note:
+- The GUI Settings screen persists `spec_dir` to `~/.focus_mapper/settings.json` and sets `FOCUS_SPEC_DIR` for the current process.
+
+If a version isn't found in the external directory, it falls back to bundled specs.
+
+### Data Generator Configuration
+
+You can customize the `DataGenerator` metadata field (used in v1.3+) using environment variables. This is useful when wrapping `focus-mapper` in another tool.
+
+**Environment Variables:**
+
+- `FOCUS_DATA_GENERATOR_NAME`: Override the generator name (default: `focus-mapper`)
+- `FOCUS_DATA_GENERATOR_VERSION`: Override the generator version (default: library version)
+
+**Priority Order:**
+
+1. Explicit arguments (CLI `--data-generator` or API `generator_name`)
+2. Environment variables
+3. Default values
+
+### v1.3 Metadata Support
 
 For v1.3 datasets, the library generates the new collection-based metadata structure:
 
@@ -231,42 +395,14 @@ Key v1.3 features:
 - **DatasetInstanceComplete**: Overall dataset completeness flag
 - **DatasetInstanceId**: Deterministic hash for dataset identification
 
-## Mapping Wizard
-
-Interactive wizard to create a mapping YAML based on a sample input file:
-
-```bash
-focus-mapper-wizard \
-  --spec v1.2 \
-  --input telemetry.csv \
-  --output mapping.yaml
-```
-
-You can also run the wizard with no arguments and it will prompt for values:
-
-```bash
-focus-mapper-wizard
-```
-
-Optional flags:
-- `--include-recommended` to include Recommended columns
-- `--include-conditional` to include Conditional columns
-- `--include-optional` to include Optional columns
-
-Tip: column name prompts support tab‑completion (case‑insensitive).
-The wizard will also show a summary of default validation settings and let you override them globally or per column.
-For standard FOCUS columns, the wizard does not offer a `cast` option because the generator will coerce to the spec type automatically.
-
-
-
-## Mapping YAML Specification
+### Mapping YAML Specification
 
 The mapping file is a YAML document that defines how your input columns are transformed into FinOps FOCUS compliant columns.
 
-### Core Concept: The Pipeline
+#### Core Concept: The Pipeline
 Each column in the `mappings` section is defined as a series of **steps**. Steps are executed in order, and the output of one step is passed as the input to the next.
 
-### Top-level Structure
+#### Top-level Structure
 ```yaml
 spec_version: "1.2"
 creation_date: "2026-02-07T09:00:00Z"  # v1.2+: ISO8601 timestamp
@@ -314,7 +450,7 @@ mappings:
         min: 0
 ```
 
-### Validation Overrides (Optional)
+#### Validation Overrides (Optional)
 
 Validation is **permissive by default** unless you define `validation.default`. You can override validation for individual columns inside each mapping:
 
@@ -383,7 +519,7 @@ Validation override keys:
 - `nullable.allow_nulls`: override spec nullability
 - `presence.enforce`: skip "missing column" checks
 
-### Validation Severity by Feature Level
+#### Validation Severity by Feature Level
 
 Missing column validation severity is determined by the column's feature level:
 
@@ -394,7 +530,7 @@ Missing column validation severity is determined by the column's feature level:
 | Conditional | INFO | Yes |
 | Optional | - | No |
 
-### Example Input (CSV)
+#### Example Input (CSV)
 
 ```csv
 billing_period,billing_date,billing_hour,billing_currency,billed_cost,tax_amount,charge_category,charge_class,charge_description,alt_description,tag_a,tag_b,pricing_quantity,pricing_unit
@@ -402,7 +538,7 @@ billing_period,billing_date,billing_hour,billing_currency,billed_cost,tax_amount
 2026-01,2026-01-30,5,USD,5.00,0.50,Tax,Normal,Sales tax,Alt tax desc,billing,tax,1,Hours
 ```
 
-### Example Mapping (YAML)
+#### Example Mapping (YAML)
 
 ```yaml
 spec_version: "1.2"
@@ -451,7 +587,7 @@ mappings:
         sep: "-"
 ```
 
-### Operation Reference
+#### Operation Reference
 
 | Operation | Description | Parameters | Example |
 |-----------|-------------|------------|---------|
@@ -469,13 +605,13 @@ mappings:
 | `pandas_expr` | Evaluate a safe pandas expression. Use `df` for the input DataFrame, `current` for the prior series, and `pd` for pandas helpers. Must return a Series or scalar. | `expr` (string) | `- op: pandas_expr`<br>`  expr: "df['a'] + df['b']"` |
 
 
-### Automatic Dry-Run for sql and pandas_expr
+#### Automatic Dry-Run for sql and pandas_expr
 
 When defining `sql` or `pandas_expr` steps in the wizard, you get a **real-time preview**:
 - **Live Dry-Run**: Try applying it for first 100 rows of input.
 - **Instant Feedback**: Shows first 5 result values on success, or error details on failure.
 
-### sql Operation (Recommended)
+#### sql Operation (Recommended)
 
 The `sql` operation uses DuckDB SQL and is recommended over `pandas_expr` for:
 - Cleaner, more readable syntax
@@ -516,7 +652,7 @@ x_RunningTotal:
 
 See [DuckDB SQL docs](https://duckdb.org/docs/sql/introduction) for available functions.
 
-### pandas_expr Safety Notes
+#### pandas_expr Safety Notes
 
 `pandas_expr` is evaluated in a restricted environment:
 - Available names: `df`, `pd`, `current`, `str`, `int`, `float`
@@ -525,22 +661,13 @@ See [DuckDB SQL docs](https://duckdb.org/docs/sql/introduction) for available fu
 
 If you need more pandas methods, add them to the allowlist in `src/focus_mapper/mapping/ops.py`.
 
-### Extension Columns
+#### Extension Columns
 Custom columns MUST start with the `x_` prefix. They will be appended to the output dataset and documented in the generated metadata if a `description` is provided.
 
-### Skip a Column
+#### Skip a Column
 If you skip a column in the wizard, it will not be mapped and will remain null in the output.
 
-## Validate
-
-```bash
-python -m focus_mapper validate \
-  --spec v1.2 \
-  --input focus.csv \
-  --out focus.validation.json
-```
-
-## Tests
+### Tests
 
 ```bash
 pytest
@@ -548,7 +675,11 @@ pytest
 
 Coverage is enabled by default. HTML report is written to `htmlcov/index.html`.
 
-## Building for Windows
+GUI tests:
+- GUI tests use Tk and run behind a guard: set `RUN_GUI_TESTS=1` to enable them locally.
+- In CI on Linux, tests run under `xvfb` so Tk can run headlessly.
+
+### Building for Windows
 
 To build standalone Windows executables (`focus-mapper.exe` and `focus-mapper-wizard.exe`), use [PyInstaller](https://pyinstaller.org/).
 

@@ -1,3 +1,5 @@
+"""Atomic mapping operations used by the mapping execution engine."""
+
 from __future__ import annotations
 
 import ast
@@ -81,6 +83,7 @@ _DISALLOWED_PANDAS_NODES = (
 
 
 def _validate_pandas_expr(expr: str) -> None:
+    """Validate pandas expression AST against allowed names/calls."""
     try:
         tree = ast.parse(expr, mode="eval")
     except SyntaxError as e:
@@ -123,6 +126,7 @@ def _validate_pandas_expr(expr: str) -> None:
 def _eval_pandas_expr(
     expr: str, *, df: pd.DataFrame, current: pd.Series | None, target: str
 ) -> pd.Series:
+    """Evaluate pandas expression in a constrained environment and normalize output."""
     _validate_pandas_expr(expr)
 
     try:
@@ -407,6 +411,11 @@ def apply_steps(
                     f"pandas_expr requires non-empty 'expr' for target {target}"
                 )
             series = _eval_pandas_expr(expr, df=df, current=series, target=target)
+            if len(series) != len(df):
+                raise MappingExecutionError(
+                    f"pandas_expr must return one value per input row for target {target} "
+                    f"(expected {len(df)}, got {len(series)})"
+                )
             continue
 
         if op == "sql":
@@ -433,6 +442,11 @@ def apply_steps(
                         )
                     result = conn.execute(query).df().iloc[:, 0]
                 series = result
+                if len(series) != len(df):
+                    raise MappingExecutionError(
+                        f"sql must return one value per input row for target {target} "
+                        f"(expected {len(df)}, got {len(series)})"
+                    )
                 
                 # If the result is datetime-like, ensure it's converted to UTC
                 if pd.api.types.is_datetime64_any_dtype(series):

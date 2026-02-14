@@ -28,6 +28,7 @@ shim_dir = os.path.join(project_root, 'tools', 'windows')
 # Source is relative to project root
 datas = [
     (os.path.join(project_root, 'src/focus_mapper/specs'), 'focus_mapper/specs'),
+    (os.path.join(project_root, 'src/focus_mapper/gui/assets'), 'focus_mapper/gui/assets'),
     # Include iso4217parse data files from venv site-packages
     (os.path.join(project_root, '.venv/Lib/site-packages/iso4217parse/data.json'), 'iso4217parse'),
     (os.path.join(project_root, '.venv/Lib/site-packages/iso4217parse/symbols.json'), 'iso4217parse')
@@ -111,4 +112,60 @@ exe_wizard = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+# --- focus-mapper-gui ---
+a_gui = Analysis(
+    [os.path.join(shim_dir, 'gui_runner.py')],
+    pathex=[os.path.join(project_root, 'src')],
+    binaries=[],
+    datas=datas,
+    hiddenimports=['pyreadline3', 'pandas', 'duckdb', 'tkinter', 'focus_mapper.gui'],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+pyz_gui = PYZ(a_gui.pure, a_gui.zipped_data, cipher=block_cipher)
+
+exe_gui = EXE(
+    pyz_gui,
+    a_gui.scripts,
+    [],
+    exclude_binaries=True,
+    name='focus-mapper-gui',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    console=False, # GUI app, no console
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=os.path.join(project_root, 'src/focus_mapper/gui/assets/icon.ico'),
+)
+
+coll = COLLECT(
+    exe_cli,
+    exe_wizard,
+    exe_gui,
+    a_cli.binaries,
+    a_cli.zipfiles,
+    a_cli.datas,
+    a_wizard.binaries,
+    a_wizard.zipfiles,
+    a_wizard.datas,
+    a_gui.binaries,
+    a_gui.zipfiles,
+    a_gui.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='focus_mapper',
 )

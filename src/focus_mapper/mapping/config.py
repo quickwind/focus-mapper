@@ -1,3 +1,5 @@
+"""Mapping configuration models and YAML loader/validator."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +13,7 @@ from ..errors import MappingConfigError
 
 @dataclass(frozen=True)
 class MappingRule:
+    """One target-column mapping rule with transformation steps and metadata."""
     target: str
     steps: list[dict[str, Any]]
     description: str | None = None
@@ -20,6 +23,7 @@ class MappingRule:
 
 @dataclass(frozen=True)
 class MappingConfig:
+    """Parsed mapping configuration and related metadata fields."""
     spec_version: str
     rules: list[MappingRule]
     validation_defaults: dict[str, Any]
@@ -29,6 +33,7 @@ class MappingConfig:
     skipped_columns: list[str] | None = None  # v0.5+: Columns explicitly skipped by user
 
     def rule_for_target(self, target: str) -> MappingRule | None:
+        """Return rule for target column, or None if unmapped."""
         for r in self.rules:
             if r.target == target:
                 return r
@@ -36,10 +41,12 @@ class MappingConfig:
 
     @property
     def extension_targets(self) -> list[str]:
+        """List extension targets (column names prefixed with `x_`)."""
         return [r.target for r in self.rules if r.target.startswith("x_")]
 
 
 def load_mapping_config(path: Path) -> MappingConfig:
+    """Load, validate, and normalize mapping YAML from disk."""
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception as e:

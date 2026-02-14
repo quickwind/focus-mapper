@@ -1,3 +1,5 @@
+"""Command-line interface for FOCUS generation and validation workflows."""
+
 from __future__ import annotations
 
 import argparse
@@ -22,14 +24,17 @@ logger = logging.getLogger("focus_mapper")
 
 
 def _path(p: str) -> Path:
+    """Expand user path input to an absolute-like Path object."""
     return Path(p).expanduser()
 
 
 def _eprint(message: str) -> None:
+    """Print a message to stderr."""
     print(message, file=sys.stderr)
 
 
 def _prompt(text: str) -> str:
+    """Read one line of interactive input."""
     return input(text)
 
 
@@ -50,6 +55,7 @@ def _prompt_bool(text: str, default: bool = True) -> bool:
 
 
 def _setup_logging(level_name: str) -> None:
+    """Configure package logging for CLI execution."""
     level = getattr(logging, level_name.upper(), logging.INFO)
     logging.basicConfig(
         level=level,
@@ -59,6 +65,7 @@ def _setup_logging(level_name: str) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the top-level CLI parser and subcommands."""
     p = argparse.ArgumentParser(prog="focus-mapper")
     p.add_argument("--version", action="version", version=f"focus-mapper {__version__}")
     p.add_argument(
@@ -131,6 +138,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _cmd_generate(args: argparse.Namespace) -> int:
+    """Run the `generate` subcommand and write all output artifacts."""
     mapping_path = getattr(args, "mapping", None)
     while mapping_path is None:
         with path_completion():
@@ -254,6 +262,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
 
 def _cmd_validate(args: argparse.Namespace) -> int:
+    """Run the `validate` subcommand for an existing FOCUS dataset."""
     spec_dir = getattr(args, "spec_dir", None)
     available = list_available_spec_versions(spec_dir=spec_dir)
     default_spec = "v1.3"
@@ -315,6 +324,7 @@ def _cmd_validate(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entrypoint for argument parsing and command dispatch."""
     parser = _build_parser()
     args = parser.parse_args(argv)
 

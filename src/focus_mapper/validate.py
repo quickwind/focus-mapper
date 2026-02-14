@@ -1,3 +1,5 @@
+"""Validation engine for FOCUS datasets with override-aware checks."""
+
 from __future__ import annotations
 
 import json
@@ -27,12 +29,14 @@ from .format_validators import (
 
 @dataclass(frozen=True)
 class ValidationSummary:
+    """Aggregate validation counters."""
     errors: int
     warnings: int
 
 
 @dataclass(frozen=True)
 class ValidationFinding:
+    """One validation issue or warning captured during validation."""
     check_id: str
     severity: str  # INFO/WARN/ERROR
     message: str
@@ -41,6 +45,7 @@ class ValidationFinding:
     sample_values: list[str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize finding payload to JSON-friendly dictionary."""
         return {
             "check_id": self.check_id,
             "severity": self.severity,
@@ -53,11 +58,13 @@ class ValidationFinding:
 
 @dataclass(frozen=True)
 class ValidationReport:
+    """Validation output containing summary and all findings."""
     summary: ValidationSummary
     findings: list[ValidationFinding]
     spec_version: str
 
     def to_dict(self) -> dict[str, Any]:
+        """Serialize report payload to JSON-friendly dictionary."""
         return {
             "spec_version": self.spec_version,
             "summary": {
@@ -83,7 +90,9 @@ def validate_focus_dataframe(
     6. Formats: Basic checks for standard formats (e.g., ISO 4217 currency codes).
     """
     findings: list[ValidationFinding] = []
-    default_validation = mapping.validation_defaults if mapping else {}
+    default_validation = (
+        mapping.validation_defaults if mapping and mapping.validation_defaults else default_validation_settings()
+    )
 
     def effective_validation(col_name: str) -> dict[str, Any]:
         base = _deep_merge({}, default_validation)
@@ -495,6 +504,31 @@ def validate_focus_dataframe(
     )
 
 
+def default_validation_settings() -> dict:
+    """Return baseline validation defaults shared across entrypoints."""
+    return {
+        "mode": "permissive",
+        "datetime": {"format": None},
+        "decimal": {
+            "precision": None,
+            "scale": None,
+            "integer_only": False,
+            "min": None,
+            "max": None,
+        },
+        "string": {
+            "min_length": None,
+            "max_length": None,
+            "allow_empty": True,
+            "trim": True,
+        },
+        "json": {"object_only": False},
+        "allowed_values": {"case_insensitive": False},
+        "nullable": {"allow_nulls": None},
+        "presence": {"enforce": True},
+    }
+
+
 def write_validation_report(report: ValidationReport, path: Path) -> None:
     """Writes the validation result to a JSON file."""
     path.write_text(
@@ -804,6 +838,7 @@ def _validate_string(
     allow_empty: bool | None,
     trim: bool | None,
 ) -> None:
+    """Validate string length/emptiness rules with optional trimming."""
     if (
         min_length is None
         and max_length is None
@@ -865,6 +900,7 @@ def _validate_string(
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge dictionaries with override precedence."""
     out = dict(base)
     for k, v in override.items():
         if k in out and isinstance(out.get(k), dict) and isinstance(v, dict):

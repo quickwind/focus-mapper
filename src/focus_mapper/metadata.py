@@ -1,3 +1,5 @@
+"""Metadata builders for sidecar JSON and Parquet key-value payloads."""
+
 from __future__ import annotations
 
 import hashlib
@@ -16,6 +18,7 @@ from .spec import FocusSpec
 
 @dataclass(frozen=True)
 class SidecarMetadata:
+    """Version-aware metadata model for generated FOCUS datasets."""
     spec_version: str
     generated_at: str
     generator_name: str
@@ -106,6 +109,7 @@ class SidecarMetadata:
         }
 
     def parquet_kv_metadata(self) -> dict[bytes, bytes]:
+        """Encode sidecar metadata as Parquet key-value bytes."""
         # Keep values short; Parquet metadata is key/value bytes.
         return {
             b"FocusMetadata": json.dumps(self.to_dict()).encode("utf-8"),
@@ -125,6 +129,7 @@ def build_sidecar_metadata(
     time_sectors: list[dict] | None = None,
     dataset_instance_complete: bool | None = None,
 ) -> SidecarMetadata:
+    """Construct sidecar metadata object from generation inputs and outputs."""
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     schema_id = _schema_id(
@@ -168,6 +173,7 @@ def build_sidecar_metadata(
 
 
 def write_sidecar_metadata(meta: SidecarMetadata, path: Path) -> None:
+    """Write sidecar metadata JSON to disk."""
     path.write_text(
         json.dumps(meta.to_dict(), indent=2, sort_keys=False), encoding="utf-8"
     )
@@ -180,6 +186,7 @@ def _schema_id(
     generator_version: str,
     columns: list[str],
 ) -> str:
+    """Derive deterministic schema identifier from mapping/spec/output shape."""
     seed = "|".join(
         [
             spec.version,
@@ -255,6 +262,7 @@ def _build_column_definitions(
     mapping: MappingConfig,
     provider_tag_prefixes: list[str],
 ) -> list[dict]:
+    """Build column definitions payload for metadata schema section."""
     out: list[dict] = []
     spec_by_name = {c.name: c for c in spec.columns}
 
@@ -282,6 +290,7 @@ def _build_column_definitions(
 
 
 def _spec_type_to_metadata(data_type: str) -> str:
+    """Map internal spec datatype labels to metadata datatype constants."""
     t = data_type.strip().lower()
     if t == "string":
         return "STRING"
@@ -299,6 +308,7 @@ def _spec_type_to_metadata(data_type: str) -> str:
 
 
 def _infer_extension_type(series: pd.Series) -> str:
+    """Infer extension column metadata type from Series dtype/sample values."""
     from pandas.api.types import (
         is_bool_dtype,
         is_datetime64_any_dtype,
@@ -320,6 +330,7 @@ def _infer_extension_type(series: pd.Series) -> str:
 
 
 def mapping_yaml_canonical(mapping: MappingConfig) -> str:
+    """Return deterministic JSON string for mapping fingerprinting."""
     # Stable-ish canonical form for hashing: deterministic json.
     data = {
         "spec_version": mapping.spec_version,

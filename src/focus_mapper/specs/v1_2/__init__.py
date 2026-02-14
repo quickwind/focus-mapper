@@ -1,1 +1,1 @@
-# Package data for FOCUS v1.2 spec artifact.
+"""Bundled FOCUS v1.2 specification package."""
