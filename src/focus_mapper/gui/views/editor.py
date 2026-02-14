@@ -274,7 +274,7 @@ class MappingEditorView(ttk.Frame):
             self.dirty = True
         
         try:
-            self.spec = load_focus_spec(self.spec_version)
+            self.spec = load_focus_spec(self.spec_version, spec_dir=self.app.get_setting("spec_dir"))
         except Exception:
             # Fallback if spec load fails
             pass

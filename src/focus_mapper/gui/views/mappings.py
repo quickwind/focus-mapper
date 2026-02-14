@@ -105,7 +105,7 @@ class MappingsListView(ttk.Frame):
                         # Ready/Not Ready check: any mandatory column missing or empty steps
                         try:
                             from focus_mapper.spec import load_focus_spec
-                            spec = load_focus_spec(spec_ver)
+                            spec = load_focus_spec(spec_ver, spec_dir=self.app.get_setting("spec_dir"))
                             mapped_cols = {
                                 k
                                 for k, v in (mappings or {}).items()
@@ -183,7 +183,10 @@ class MappingsListView(ttk.Frame):
         versions = ["v1.3", "v1.2", "v1.1"]
         try:
             from focus_mapper.spec import list_available_spec_versions
-            versions = sorted(list_available_spec_versions(), reverse=True)
+            versions = sorted(
+                list_available_spec_versions(spec_dir=self.app.get_setting("spec_dir")),
+                reverse=True,
+            )
         except ImportError:
             pass
             

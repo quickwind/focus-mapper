@@ -1,12 +1,11 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from tkinter import font as tkfont
 from pathlib import Path
 import threading
-import queue
 import traceback
 
 from focus_mapper.api import generate
-from focus_mapper.spec import list_available_spec_versions
 
 class GeneratorView(ttk.Frame):
     def __init__(self, parent, app_context):
@@ -32,7 +31,7 @@ class GeneratorView(ttk.Frame):
         # 2. Mapping Configuration
         ttk.Label(form, text="Mapping Config:").grid(row=1, column=0, sticky="w", pady=5)
         self.mapping_var = tk.StringVar()
-        self.mapping_cb = ttk.Combobox(form, textvariable=self.mapping_var, width=47)
+        self.mapping_cb = ttk.Combobox(form, textvariable=self.mapping_var, width=47, state="readonly")
         self.mapping_cb.grid(row=1, column=1, sticky="ew", padx=5)
         self._populate_mappings()
         
@@ -42,27 +41,32 @@ class GeneratorView(ttk.Frame):
         self.output_entry.grid(row=2, column=1, sticky="ew", padx=5)
         ttk.Button(form, text="Browse...", command=self.browse_output).grid(row=2, column=2)
 
-        # 4. Spec Version (Optional)
-        ttk.Label(form, text="Spec Version:").grid(row=3, column=0, sticky="w", pady=5)
-        self.spec_var = tk.StringVar(value="v1.3")
-        specs = ["v1.3", "v1.2", "v1.1"] # Could dynamic list
-        self.spec_cb = ttk.Combobox(form, textvariable=self.spec_var, values=specs, width=10)
-        self.spec_cb.grid(row=3, column=1, sticky="w", padx=5)
-
         form.columnconfigure(1, weight=1)
 
         # Action Button
         self.generate_btn = ttk.Button(self, text="Generate Dataset", command=self.on_generate)
-        self.generate_btn.pack(pady=20)
+        self.generate_btn.pack(pady=12)
+
+        # Preview Area
+        ttk.Label(self, text="Result Preview (first 100 rows):").pack(anchor="w", padx=10, pady=(0, 4))
+        preview_frame = ttk.Frame(self)
+        preview_frame.pack(fill="both", expand=True, padx=10, pady=(0, 8))
+        self.preview_tree = ttk.Treeview(preview_frame, show="headings", height=12)
+        self.preview_tree.pack(side="left", fill="both", expand=True)
+        preview_y = ttk.Scrollbar(preview_frame, orient="vertical", command=self.preview_tree.yview)
+        preview_y.pack(side="right", fill="y")
+        preview_x = ttk.Scrollbar(self, orient="horizontal", command=self.preview_tree.xview)
+        preview_x.pack(fill="x", padx=10, pady=(0, 8))
+        self.preview_tree.configure(yscrollcommand=preview_y.set, xscrollcommand=preview_x.set)
+
+        # Logs
+        ttk.Label(self, text="Logs:").pack(anchor="w", padx=10)
+        self.log_text = tk.Text(self, height=8, state="disabled")
+        self.log_text.pack(fill="both", expand=False, padx=10, pady=(0, 8))
 
         # Progress
         self.progress = ttk.Progressbar(self, mode="indeterminate")
-        self.progress.pack(fill="x", padx=10, pady=5)
-
-        # Log Area
-        ttk.Label(self, text="Logs:").pack(anchor="w", padx=10)
-        self.log_text = tk.Text(self, height=10, state="disabled")
-        self.log_text.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        self.progress.pack(fill="x", padx=10, pady=(0, 10))
 
     def _populate_mappings(self):
         if not self.mappings_dir.exists():
@@ -94,7 +98,6 @@ class GeneratorView(ttk.Frame):
         input_path = self.input_entry.get()
         mapping_name = self.mapping_var.get()
         output_path = self.output_entry.get()
-        spec_version = self.spec_var.get()
 
         if not all([input_path, mapping_name, output_path]):
             messagebox.showwarning("Missing Info", "Please provide Input, Mapping, and Output.", parent=self)
@@ -107,19 +110,21 @@ class GeneratorView(ttk.Frame):
 
         self.generate_btn.config(state="disabled")
         self.progress.start(10)
-        self.log("Starting generation...")
+        self.log("Starting generation (spec version comes from mapping config)...")
+        self._clear_preview()
 
         # Run in thread
-        thread = threading.Thread(target=self._run_generation, args=(input_path, mapping_path, output_path, spec_version))
+        thread = threading.Thread(target=self._run_generation, args=(input_path, mapping_path, output_path), daemon=True)
         thread.start()
 
-    def _run_generation(self, input_path, mapping_path, output_path, spec_version):
+    def _run_generation(self, input_path, mapping_path, output_path):
         try:
+            spec_dir = self.app.get_setting("spec_dir", None)
             result = generate(
                 input_data=input_path,
                 mapping=str(mapping_path),
                 output_path=output_path,
-                spec_version=spec_version
+                spec_dir=spec_dir or None,
             )
             
             self.after(0, self._on_success, result)
@@ -130,6 +135,7 @@ class GeneratorView(ttk.Frame):
     def _on_success(self, result):
         self.progress.stop()
         self.generate_btn.config(state="normal")
+        self._show_preview(result.output_df)
         
         if result.is_valid:
             self.log(f"Success! Generated {len(result.output_df)} rows.")
@@ -144,35 +150,86 @@ class GeneratorView(ttk.Frame):
             self.view_report_btn.destroy()
             
         self.view_report_btn = ttk.Button(self, text="View Validation Report", 
-                                          command=lambda: self.open_report(result.validation))
+                                          command=lambda: self.open_report(result.validation, len(result.output_df)))
         self.view_report_btn.pack(pady=10)
 
-    def open_report(self, validation_report):
-        from focus_mapper.gui.views.report import ReportView
-        # Convert report object to dict if needed, or pass directly if supported
-        # ReportView expects dict structure currently
-        import json
-        # Fast way: assume it's dict-like or standard object
-        # The library returns a pydantic model usually? 
-        # result.validation is a ValidationReport object
-        # Let's serialize it to be safe and consistent with file loading
-        try:
-            # Pydantic v2
-            data = validation_report.model_dump()
-        except AttributeError:
-            # Pydantic v1 or just object
+    def open_report(self, validation_report, total_rows=None):
+        data = None
+        if hasattr(validation_report, "to_dict") and callable(validation_report.to_dict):
+            data = validation_report.to_dict()
+        else:
             try:
-                data = validation_report.dict()
+                data = validation_report.model_dump()
             except AttributeError:
-                data = validation_report # Hope for the best or it's already dict
-        
-        self.app._clear_content()
-        self.app.current_view = ReportView(self.app.content_frame, self.app, report_data=data)
-        self.app.current_view.pack(fill="both", expand=True)
+                try:
+                    data = validation_report.dict()
+                except AttributeError:
+                    if isinstance(validation_report, dict):
+                        data = validation_report
+        if not isinstance(data, dict):
+            messagebox.showerror("Error", "Unable to open validation report due to serialization failure.", parent=self)
+            return
+        if total_rows is not None:
+            data["total_rows"] = int(total_rows)
+            if isinstance(data.get("summary"), dict) and "total_rows" not in data["summary"]:
+                data["summary"]["total_rows"] = int(total_rows)
+
+        self.app.show_report_view(data, back_view=self)
+
+    def _clear_preview(self):
+        for item in self.preview_tree.get_children():
+            self.preview_tree.delete(item)
+        self.preview_tree["columns"] = ()
+
+    def _show_preview(self, df):
+        self._clear_preview()
+        if df is None or df.empty:
+            return
+
+        preview_df = df.head(100).copy()
+        index_col = "__row_index__"
+        columns = [index_col] + [str(c) for c in preview_df.columns]
+        self.preview_tree["columns"] = columns
+        for col in columns:
+            self.preview_tree.heading(col, text="#" if col == index_col else col)
+            self.preview_tree.column(col, anchor="e" if col == index_col else "w", stretch=False)
+
+        for idx, row in enumerate(preview_df.itertuples(index=False, name=None), start=1):
+            values = [idx]
+            values.extend("" if v is None else str(v) for v in row)
+            self.preview_tree.insert("", "end", values=values)
+        self._autosize_preview_columns(preview_df, columns, index_col)
+
+    def _autosize_preview_columns(self, preview_df, columns, index_col):
+        min_width = 80
+        max_width = 420
+        padding = 20
+        font = tkfont.nametofont("TkDefaultFont")
+
+        for col in columns:
+            header = "#" if col == index_col else col
+            width = font.measure(header) + padding
+            if col == index_col:
+                width = max(width, 60)
+                self.preview_tree.column(col, width=min(width, 90))
+                continue
+
+            series = preview_df[col] if col in preview_df.columns else []
+            for val in series:
+                text = "" if val is None else str(val)
+                candidate = font.measure(text) + padding
+                if candidate > width:
+                    width = candidate
+                if width >= max_width:
+                    width = max_width
+                    break
+
+            width = max(min_width, min(width, max_width))
+            self.preview_tree.column(col, width=width)
 
     def _on_error(self, error_msg, trace):
         self.progress.stop()
         self.generate_btn.config(state="normal")
         self.log(f"Error: {error_msg}")
-        print(trace) # Print trace to stdout for debug
+        print(trace)
         messagebox.showerror("Generation Failed", error_msg)
