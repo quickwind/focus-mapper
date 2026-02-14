@@ -1,3 +1,5 @@
+"""Mappings management view for listing and maintaining mapping YAML files."""
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import shutil
@@ -5,12 +7,28 @@ from pathlib import Path
 import os
 
 import yaml # Added import
+from focus_mapper.gui.ui_utils import (
+    set_tooltip,
+    refresh_sort_headers,
+    sort_tree_items,
+    autosize_treeview_columns,
+)
 
 class MappingsListView(ttk.Frame):
+    """Mappings list screen with CRUD/import/export actions."""
     def __init__(self, parent, app_context):
         super().__init__(parent)
         self.app = app_context
         self.mappings_dir = Path.home() / ".focus_mapper" / "mappings"
+        self._sort_state = {}
+        self._base_headings = {
+            "filename": "File Name",
+            "dataset_type": "Dataset Type",
+            "dataset_instance": "Dataset Instance Name",
+            "column_count": "Column Count",
+            "status": "Status",
+            "modified": "Last Modified Time",
+        }
         
         # Ensure directory exists
         self.mappings_dir.mkdir(parents=True, exist_ok=True)
@@ -19,6 +37,7 @@ class MappingsListView(ttk.Frame):
         self.refresh_list()
 
     def _create_ui(self):
+        """Build toolbar and mappings table widgets."""
         # Header
         header_frame = ttk.Frame(self)
         header_frame.pack(fill="x", pady=(0, 10))
@@ -31,30 +50,44 @@ class MappingsListView(ttk.Frame):
         # Group 1: Manage
         manage_frame = ttk.LabelFrame(toolbar, text="Manage", padding=(2, 0))
         manage_frame.pack(side="left", padx=2)
-        ttk.Button(manage_frame, text="New", command=self.on_new).pack(side="left", padx=0)
-        ttk.Button(manage_frame, text="Edit", command=self.on_edit).pack(side="left", padx=0)
-        ttk.Button(manage_frame, text="Clone", command=self.on_clone).pack(side="left", padx=0)
-        ttk.Button(manage_frame, text="Delete", command=self.on_delete).pack(side="left", padx=0)
+        btn_new = ttk.Button(manage_frame, text="New", command=self.on_new)
+        btn_new.pack(side="left", padx=0)
+        set_tooltip(btn_new, "Create a new mapping file.")
+        btn_edit = ttk.Button(manage_frame, text="Edit", command=self.on_edit)
+        btn_edit.pack(side="left", padx=0)
+        set_tooltip(btn_edit, "Edit the selected mapping.")
+        btn_clone = ttk.Button(manage_frame, text="Clone", command=self.on_clone)
+        btn_clone.pack(side="left", padx=0)
+        set_tooltip(btn_clone, "Create a copy of the selected mapping.")
+        btn_delete = ttk.Button(manage_frame, text="Delete", command=self.on_delete)
+        btn_delete.pack(side="left", padx=0)
+        set_tooltip(btn_delete, "Delete the selected mapping.")
 
         # Group 2: Import/Export
         io_frame = ttk.LabelFrame(toolbar, text="Import/Export", padding=(2, 0))
         io_frame.pack(side="left", padx=2)
-        ttk.Button(io_frame, text="Import", command=self.on_import).pack(side="left", padx=0)
-        ttk.Button(io_frame, text="Export", command=self.on_export).pack(side="left", padx=0)
+        btn_import = ttk.Button(io_frame, text="Import", command=self.on_import)
+        btn_import.pack(side="left", padx=0)
+        set_tooltip(btn_import, "Import a mapping YAML from disk.")
+        btn_export = ttk.Button(io_frame, text="Export", command=self.on_export)
+        btn_export.pack(side="left", padx=0)
+        set_tooltip(btn_export, "Export the selected mapping YAML.")
 
         # Group 3: Tools
-        ttk.Button(toolbar, text="Refresh", command=self.refresh_list).pack(side="right", padx=5, pady=5)
+        btn_refresh = ttk.Button(toolbar, text="Refresh", command=self.refresh_list)
+        btn_refresh.pack(side="right", padx=5, pady=5)
+        set_tooltip(btn_refresh, "Reload mapping files from disk.")
 
 
         # Mappings List (Treeview)
         columns = ("filename", "dataset_type", "dataset_instance", "column_count", "status", "modified")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", selectmode="browse")
-        self.tree.heading("filename", text="File Name")
-        self.tree.heading("dataset_type", text="Dataset Type")
-        self.tree.heading("dataset_instance", text="Dataset Instance Name")
-        self.tree.heading("column_count", text="Column Count")
-        self.tree.heading("status", text="Status")
-        self.tree.heading("modified", text="Last Modified Time")
+        self.tree.heading("filename", text="File Name", command=lambda: self._sort_tree("filename"))
+        self.tree.heading("dataset_type", text="Dataset Type", command=lambda: self._sort_tree("dataset_type"))
+        self.tree.heading("dataset_instance", text="Dataset Instance Name", command=lambda: self._sort_tree("dataset_instance"))
+        self.tree.heading("column_count", text="Column Count", command=lambda: self._sort_tree("column_count"))
+        self.tree.heading("status", text="Status", command=lambda: self._sort_tree("status"))
+        self.tree.heading("modified", text="Last Modified Time", command=lambda: self._sort_tree("modified"))
         self.tree.column("filename", width=220)
         self.tree.column("dataset_type", width=130)
         self.tree.column("dataset_instance", width=200)
@@ -68,11 +101,14 @@ class MappingsListView(ttk.Frame):
         
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+        set_tooltip(self.tree, "Mappings table. Click a column header to sort.")
         
         # Double click to edit
         self.tree.bind("<Double-1>", lambda e: self.on_edit())
+        self._refresh_sort_headers()
 
     def refresh_list(self):
+        """Reload mapping files and refresh table rows."""
         # Clear existing items
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -131,8 +167,47 @@ class MappingsListView(ttk.Frame):
                 tags=("not_ready",) if status == "Not Ready" else (),
             )
         self.tree.tag_configure("not_ready", foreground="red")
+        self._autosize_columns()
+
+    def _sort_tree(self, column: str):
+        """Sort mappings table by selected column."""
+        if column == "column_count":
+            def key_fn(v):
+                try:
+                    return int(v)
+                except Exception:
+                    return 0
+        else:
+            key_fn = None
+        self._sort_state = sort_tree_items(self.tree, column, self._sort_state, key_func=key_fn)
+        self._refresh_sort_headers()
+
+    def _refresh_sort_headers(self):
+        """Update header sort arrows for current table sort state."""
+        refresh_sort_headers(self.tree, self._base_headings, self._sort_state)
+
+    def _autosize_columns(self):
+        """Adjust table column widths to content within sensible bounds."""
+        min_w = {
+            "filename": 180,
+            "dataset_type": 120,
+            "dataset_instance": 180,
+            "column_count": 110,
+            "status": 100,
+            "modified": 170,
+        }
+        max_w = {
+            "filename": 360,
+            "dataset_type": 220,
+            "dataset_instance": 320,
+            "column_count": 150,
+            "status": 170,
+            "modified": 220,
+        }
+        autosize_treeview_columns(self.tree, self._base_headings, min_w, max_w)
 
     def get_selected_path(self):
+        """Return currently selected mapping file path or warn user."""
         selection = self.tree.selection()
         if not selection:
             messagebox.showwarning("Selection Required", "Please select a mapping file.", parent=self)
@@ -140,6 +215,7 @@ class MappingsListView(ttk.Frame):
         return Path(selection[0])
 
     def on_new(self):
+        """Start mapping creation flow."""
         from focus_mapper.gui.views.editor import MappingEditorView
         from tkinter import simpledialog
         
@@ -153,6 +229,7 @@ class MappingsListView(ttk.Frame):
         self.app.current_view.pack(fill="both", expand=True)
 
     def _ask_spec_version(self):
+        """Prompt user to choose spec version for a new mapping."""
         # Custom modal dialog for selection
         dialog = tk.Toplevel(self)
         dialog.title("New Mapping")
@@ -207,6 +284,7 @@ class MappingsListView(ttk.Frame):
         return result[0]
 
     def on_import(self):
+        """Import mapping YAML into local mappings directory."""
         file_path = filedialog.askopenfilename(
             title="Import Mapping",
             filetypes=[("YAML files", "*.yaml"), ("All files", "*.*")],
@@ -226,6 +304,7 @@ class MappingsListView(ttk.Frame):
                 messagebox.showerror("Error", f"Failed to import: {e}", parent=self)
 
     def on_edit(self):
+        """Open selected mapping in editor."""
         path = self.get_selected_path()
         if path:
             from focus_mapper.gui.views.editor import MappingEditorView
@@ -234,6 +313,7 @@ class MappingsListView(ttk.Frame):
             self.app.current_view.pack(fill="both", expand=True)
 
     def on_clone(self):
+        """Clone selected mapping to a new file."""
         path = self.get_selected_path()
         if path:
             new_name = filedialog.asksaveasfilename(
@@ -252,6 +332,7 @@ class MappingsListView(ttk.Frame):
                     messagebox.showerror("Error", f"Failed to clone: {e}", parent=self)
 
     def on_export(self):
+        """Export selected mapping to chosen destination."""
         path = self.get_selected_path()
         if path:
             dest = filedialog.asksaveasfilename(
@@ -269,6 +350,7 @@ class MappingsListView(ttk.Frame):
                     messagebox.showerror("Error", f"Failed to export: {e}", parent=self)
 
     def on_delete(self):
+        """Delete selected mapping after confirmation."""
         path = self.get_selected_path()
         if path:
             if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete {path.name}?", parent=self):

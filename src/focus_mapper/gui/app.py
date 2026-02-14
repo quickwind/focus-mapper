@@ -1,3 +1,5 @@
+"""Tkinter desktop application shell for focus-mapper GUI views."""
+
 import tkinter as tk
 from tkinter import ttk
 import json
@@ -5,6 +7,7 @@ import os
 from pathlib import Path
 
 class App(tk.Tk):
+    """Main GUI application window and view router."""
     def __init__(self):
         super().__init__()
 
@@ -37,6 +40,7 @@ class App(tk.Tk):
         self._show_welcome_view()
 
     def _create_navigation(self):
+        """Create left-side navigation and action buttons."""
         ttk.Label(self.nav_frame, text="Focus Mapper", font=("Helvetica", 16, "bold")).pack(pady=(0, 20))
         
         # Navigation Buttons
@@ -47,6 +51,7 @@ class App(tk.Tk):
         ttk.Button(self.nav_frame, text="Settings", command=self.show_settings_view).pack(fill="x", pady=5)
 
     def _show_welcome_view(self):
+        """Initialize local app directories and show default view."""
         # Determine the user home directory and settings path
         home_dir = self.config_dir
         if not home_dir.exists():
@@ -59,12 +64,14 @@ class App(tk.Tk):
         self.show_mappings_view()
     
     def show_mappings_view(self):
+        """Open mappings manager view."""
         self._clear_content()
         from focus_mapper.gui.views.mappings import MappingsListView
         self.current_view = MappingsListView(self.content_frame, self)
         self.current_view.pack(fill="both", expand=True)
 
     def show_generator_view(self):
+        """Open generator view, reusing existing instance when available."""
         if self.current_view and self.current_view.__class__.__name__ == "GeneratorView":
             return
         for widget in self.content_frame.winfo_children():
@@ -77,12 +84,14 @@ class App(tk.Tk):
         self.current_view.pack(fill="both", expand=True)
 
     def show_settings_view(self):
+        """Open settings view."""
         self._clear_content()
         from focus_mapper.gui.views.settings import SettingsView
         self.current_view = SettingsView(self.content_frame, self)
         self.current_view.pack(fill="both", expand=True)
 
     def show_report_view(self, report_data, back_view=None):
+        """Open report view and optionally retain a back-reference view."""
         if self.current_view and back_view is not self.current_view:
             self.current_view.destroy()
         elif self.current_view:
@@ -92,12 +101,14 @@ class App(tk.Tk):
         self.current_view.pack(fill="both", expand=True)
 
     def _show_existing_view(self, view):
+        """Show an existing view instance in the content area."""
         if self.current_view and self.current_view is not view:
             self.current_view.destroy()
         self.current_view = view
         view.pack(fill="both", expand=True)
 
     def _load_settings(self):
+        """Load persisted GUI settings and sync related environment variables."""
         try:
             if self.settings_path.exists():
                 settings = json.loads(self.settings_path.read_text(encoding="utf-8"))
@@ -112,6 +123,7 @@ class App(tk.Tk):
         return {}
 
     def save_settings(self):
+        """Persist current GUI settings to disk."""
         try:
             self.config_dir.mkdir(parents=True, exist_ok=True)
             self.settings_path.write_text(json.dumps(self.settings, indent=2), encoding="utf-8")
@@ -119,9 +131,11 @@ class App(tk.Tk):
             print(f"Warning: Could not save settings: {e}")
 
     def get_setting(self, key, default=None):
+        """Read one setting value with optional default."""
         return self.settings.get(key, default)
 
     def set_setting(self, key, value):
+        """Set/remove one setting and persist it."""
         if value in ("", None):
             self.settings.pop(key, None)
         else:
@@ -134,5 +148,6 @@ class App(tk.Tk):
         self.save_settings()
 
     def _clear_content(self):
+        """Destroy all widgets in the content container."""
         for widget in self.content_frame.winfo_children():
             widget.destroy()

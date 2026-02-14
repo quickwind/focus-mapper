@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog, filedialog
+from tkinter import font as tkfont
 from pathlib import Path
 import json
 import yaml
@@ -14,49 +15,7 @@ from focus_mapper.format_validators import (
     validate_key_value_format,
     validate_json_object_format,
 )
-
-
-class _WidgetTooltip:
-    def __init__(self, widget):
-        self.widget = widget
-        self.tip = None
-        self.label = None
-
-    def show(self, text: str):
-        if not text:
-            self.hide()
-            return
-        if self.tip is None:
-            self.tip = tk.Toplevel(self.widget)
-            self.tip.wm_overrideredirect(True)
-            self.tip.attributes("-topmost", True)
-            self.label = ttk.Label(self.tip, text=text, padding=6, background="#ffffe0")
-            self.label.pack()
-        else:
-            self.label.config(text=text)
-        x = self.widget.winfo_rootx() + 10
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
-        self.tip.geometry(f"+{x}+{y}")
-
-    def hide(self):
-        if self.tip is not None:
-            self.tip.destroy()
-            self.tip = None
-            self.label = None
-
-
-def _set_tooltip(widget, text: str):
-    if not text:
-        return
-    if not hasattr(widget, "_tooltip"):
-        widget._tooltip = _WidgetTooltip(widget)
-        def on_enter(_e, w=widget):
-            w._tooltip.show(getattr(w, "_tooltip_text", ""))
-        def on_leave(_e, w=widget):
-            w._tooltip.hide()
-        widget.bind("<Enter>", on_enter)
-        widget.bind("<Leave>", on_leave)
-    widget._tooltip_text = text
+from focus_mapper.gui.ui_utils import WidgetTooltip as _WidgetTooltip, set_tooltip as _set_tooltip
 
 
 def _create_star(parent, tooltip: str, **pack_opts):
@@ -228,6 +187,8 @@ class MappingEditorView(ttk.Frame):
         self.sample_df = None
         self.dirty = False
         self._suppress_dirty = False
+        self._preview_sort_state = {}
+        self._preview_base_headings = {}
         
         self._load_data()
         self._suppress_dirty = True
@@ -474,6 +435,7 @@ class MappingEditorView(ttk.Frame):
                 tags=("tbd",) if status == "TBD" else (),
             )
         self.tree.tag_configure("tbd", foreground="red")
+        self._autosize_columns_tree()
 
     def _setup_tree_sorting(self):
         for col in self.tree["columns"]:
@@ -512,6 +474,33 @@ class MappingEditorView(ttk.Frame):
                 self.tree.heading(col, text=text)
             else:
                 self.tree.heading(col, text=text + (arrow_down if is_desc else arrow_up))
+
+    def _autosize_columns_tree(self):
+        # Resize columns to content with max bounds so long text does not dominate layout.
+        font = tkfont.nametofont("TkDefaultFont")
+        bounds = {
+            "#0": (170, 360),
+            "status": (90, 220),
+            "feature_level": (110, 220),
+            "data_type": (150, 360),
+            "nullable": (80, 120),
+        }
+        headers = {
+            "#0": "Column Name",
+            "status": "Status",
+            "feature_level": "Feature Level",
+            "data_type": "Data Type",
+            "nullable": "Nullable",
+        }
+        for col, (min_w, max_w) in bounds.items():
+            width = font.measure(headers[col]) + 20
+            for iid in self.tree.get_children(""):
+                value = self.tree.item(iid, "text") if col == "#0" else self.tree.set(iid, col)
+                width = max(width, font.measure(str(value)) + 20)
+                if width >= max_w:
+                    width = max_w
+                    break
+            self.tree.column(col, width=max(min_w, min(width, max_w)))
 
     def _on_tree_hover(self, event):
         row_id = self.tree.identify_row(event.y)
@@ -663,10 +652,13 @@ class MappingEditorView(ttk.Frame):
                 show="headings",
                 height=12,
             )
-            self.preview_tree.heading("index", text="#")
-            self.preview_tree.heading("value", text="Value")
+            self.preview_tree.heading("index", text="#", command=lambda: self._sort_preview_tree("index"))
+            self.preview_tree.heading("value", text="Value", command=lambda: self._sort_preview_tree("value"))
             self.preview_tree.column("index", width=60, anchor="e")
             self.preview_tree.column("value", width=300)
+            self._preview_base_headings = {"index": "#", "value": "Value"}
+            self._preview_sort_state = {}
+            self._refresh_preview_sort_headers()
             preview_scroll = ttk.Scrollbar(self.preview_frame, orient="vertical", command=self.preview_tree.yview)
             self.preview_tree.configure(yscrollcommand=preview_scroll.set)
             self.preview_tree.pack(side="left", fill="both", expand=True)
@@ -680,6 +672,51 @@ class MappingEditorView(ttk.Frame):
                 else:
                     self._update_preview(col_name, rule.steps[0])
         self._suppress_dirty = False
+
+    def _sort_preview_tree(self, column: str):
+        if not hasattr(self, "preview_tree"):
+            return
+        items = [(self.preview_tree.set(iid, column), iid) for iid in self.preview_tree.get_children("")]
+        reverse = not self._preview_sort_state.get(column, False)
+        if column == "index":
+            def key_fn(v):
+                try:
+                    return int(v[0])
+                except Exception:
+                    return 0
+        else:
+            key_fn = lambda v: str(v[0]).lower()
+        items.sort(key=key_fn, reverse=reverse)
+        for idx, (_, iid) in enumerate(items):
+            self.preview_tree.move(iid, "", idx)
+        self._preview_sort_state = {column: reverse}
+        self._refresh_preview_sort_headers()
+
+    def _refresh_preview_sort_headers(self):
+        if not hasattr(self, "preview_tree"):
+            return
+        arrow_up = " ▲"
+        arrow_down = " ▼"
+        for col, label in self._preview_base_headings.items():
+            if self._preview_sort_state.get(col) is None:
+                self.preview_tree.heading(col, text=label)
+            else:
+                self.preview_tree.heading(col, text=label + (arrow_down if self._preview_sort_state[col] else arrow_up))
+
+    def _autosize_preview_tree_columns(self):
+        if not hasattr(self, "preview_tree"):
+            return
+        font = tkfont.nametofont("TkDefaultFont")
+        bounds = {"index": (60, 90), "value": (160, 540)}
+        headers = {"index": "#", "value": "Value"}
+        for col, (min_w, max_w) in bounds.items():
+            width = font.measure(headers[col]) + 20
+            for iid in self.preview_tree.get_children(""):
+                width = max(width, font.measure(str(self.preview_tree.set(iid, col))) + 20)
+                if width >= max_w:
+                    width = max_w
+                    break
+            self.preview_tree.column(col, width=max(min_w, min(width, max_w)))
 
     def _pick_operation_type(self, current: str | None = None) -> str | None:
         options = [
@@ -2043,6 +2080,7 @@ class MappingEditorView(ttk.Frame):
                 series = apply_steps(self.sample_df, steps=[step_preview], target=col_name)
             for idx, val in enumerate(series.head(100).tolist(), start=1):
                 self.preview_tree.insert("", "end", values=(idx, str(val)))
+            self._autosize_preview_tree_columns()
         except Exception as e:
             self.preview_error.config(text=str(e))
 
@@ -2063,6 +2101,7 @@ class MappingEditorView(ttk.Frame):
             if hasattr(self, "preview_tree"):
                 for idx, val in enumerate(series.head(100).tolist(), start=1):
                     self.preview_tree.insert("", "end", values=(idx, str(val)))
+                self._autosize_preview_tree_columns()
         except Exception as e:
             err = str(e)
             dialog = tk.Toplevel(self)

@@ -1,9 +1,18 @@
+"""Validation report view with filtering and sortable findings table."""
+
 import tkinter as tk
 from tkinter import ttk
 import json
 from pathlib import Path
+from focus_mapper.gui.ui_utils import (
+    set_tooltip,
+    refresh_sort_headers,
+    autosize_treeview_columns,
+)
+
 
 class ReportView(ttk.Frame):
+    """Display validation summary and findings for one generation run."""
     def __init__(self, parent, app_context, report_path=None, report_data=None, back_view=None):
         super().__init__(parent)
         self.app = app_context
@@ -28,10 +37,13 @@ class ReportView(ttk.Frame):
         self._populate_tree()
 
     def _create_ui(self):
+        """Build report header, filters, and findings table."""
         # Header
         header = ttk.Frame(self)
         header.pack(fill="x", pady=10)
-        ttk.Button(header, text="Back", command=self.on_back).pack(side="left")
+        back_btn = ttk.Button(header, text="Back", command=self.on_back)
+        back_btn.pack(side="left")
+        set_tooltip(back_btn, "Return to the previous generator results page.")
         ttk.Label(header, text="Validation Report", font=("Helvetica", 16, "bold")).pack(side="left", padx=20)
 
         # Summary
@@ -54,6 +66,7 @@ class ReportView(ttk.Frame):
         )
         self.severity_cb.pack(side="left", padx=5)
         self.severity_cb.bind("<<ComboboxSelected>>", lambda _e: self._populate_tree())
+        set_tooltip(self.severity_cb, "Filter findings by severity.")
 
         # Findings Tree
         columns = ("severity", "column", "message", "rows")
@@ -69,6 +82,7 @@ class ReportView(ttk.Frame):
         self.tree.column("column", width=150)
         self.tree.column("message", width=400)
         self.tree.column("rows", width=100)
+        set_tooltip(self.tree, "Validation findings table. Click a header to sort.")
 
         scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -83,6 +97,7 @@ class ReportView(ttk.Frame):
         self._refresh_sort_headers()
 
     def _populate_tree(self):
+        """Populate findings table from report data and active filters/sort."""
         # Clear
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -106,8 +121,10 @@ class ReportView(ttk.Frame):
             rows = self._rows_text(f)
             
             self.tree.insert("", "end", values=(severity, col, msg, rows), tags=(severity,))
+        self._autosize_columns()
 
     def _rows_text(self, finding):
+        """Render row-count cell text from finding payload."""
         if "failing_rows" in finding and finding.get("failing_rows") is not None:
             return str(finding.get("failing_rows"))
         if "rows" in finding:
@@ -115,6 +132,7 @@ class ReportView(ttk.Frame):
         return "-"
 
     def _on_sort(self, col):
+        """Toggle sorting on a table column."""
         if self._sort_state["col"] == col:
             self._sort_state["descending"] = not self._sort_state["descending"]
         else:
@@ -124,16 +142,14 @@ class ReportView(ttk.Frame):
         self._populate_tree()
 
     def _refresh_sort_headers(self):
-        arrow_up = " ▲"
-        arrow_down = " ▼"
-        for col, label in self._base_headings.items():
-            if self._sort_state["col"] == col:
-                arrow = arrow_down if self._sort_state["descending"] else arrow_up
-                self.tree.heading(col, text=label + arrow)
-            else:
-                self.tree.heading(col, text=label)
+        """Refresh sort arrow indicator in table headers."""
+        state = {
+            self._sort_state["col"]: self._sort_state["descending"],
+        }
+        refresh_sort_headers(self.tree, self._base_headings, state)
 
     def _sort_key_for_finding(self, finding):
+        """Return sortable key for current sort column."""
         col = self._sort_state["col"]
         if col == "severity":
             rank = {"ERROR": 0, "WARN": 1, "INFO": 2}
@@ -154,7 +170,20 @@ class ReportView(ttk.Frame):
                 return 0
         return 0
 
+    def _autosize_columns(self):
+        """Auto-size findings table columns with conservative bounds."""
+        bounds = {
+            "severity": (80, 130),
+            "column": (120, 280),
+            "message": (220, 680),
+            "rows": (80, 180),
+        }
+        min_widths = {k: v[0] for k, v in bounds.items()}
+        max_widths = {k: v[1] for k, v in bounds.items()}
+        autosize_treeview_columns(self.tree, self._base_headings, min_widths, max_widths)
+
     def on_back(self):
+        """Return to previous view if retained, otherwise open generator view."""
         if self.back_view is not None and self.back_view.winfo_exists():
             self.destroy()
             self.app.current_view = self.back_view
