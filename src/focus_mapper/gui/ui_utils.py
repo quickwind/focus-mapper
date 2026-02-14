@@ -116,14 +116,33 @@ def make_combobox_filterable(combobox: ttk.Combobox, values: list[str]):
     def _on_keyrelease(event=None):
         if event is not None and event.keysym in {"Up", "Down", "Left", "Right", "Escape"}:
             return
-        needle = combobox.get().strip().lower()
+        typed = combobox.get()
+        needle = typed.strip().lower()
         if not needle:
             filtered = all_values
         else:
-            filtered = [item for item in all_values if needle in item.lower()]
-        combobox["values"] = filtered or all_values
-        if filtered:
-            combobox.event_generate("<Down>")
+            # Prefix match to narrow to likely source column names quickly.
+            filtered = [item for item in all_values if item.lower().startswith(needle)]
+
+        combobox["values"] = filtered
+        # Keep user-typed text stable after replacing values.
+        combobox.delete(0, "end")
+        combobox.insert(0, typed)
+        combobox.icursor("end")
+
+        # Auto-open dropdown while typing so users can pick immediately.
+        if needle and filtered:
+            def _open_dropdown():
+                try:
+                    combobox.tk.call("ttk::combobox::Post", str(combobox))
+                    return
+                except Exception:
+                    pass
+                try:
+                    combobox.event_generate("<Down>")
+                except Exception:
+                    pass
+            combobox.after_idle(_open_dropdown)
 
     combobox.bind("<KeyRelease>", _on_keyrelease, add="+")
     return combobox

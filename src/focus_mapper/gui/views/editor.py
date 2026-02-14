@@ -1406,7 +1406,7 @@ class MappingEditorView(ttk.Frame):
                     self._set_status_for_column(col_name)
                     self._update_preview(col_name, step)
                 cb.bind("<<ComboboxSelected>>", on_select)
-                cb.bind("<KeyRelease>", on_select)
+                cb.bind("<KeyRelease>", on_select, add="+")
                 _set_tooltip(cb, tooltip)
                 on_select()
                 return cb
@@ -1845,7 +1845,7 @@ class MappingEditorView(ttk.Frame):
                     if value_var.get():
                         new.set(value_var.get())
                     new.bind("<<ComboboxSelected>>", lambda _e: update_math())
-                    new.bind("<KeyRelease>", lambda _e: update_math())
+                    new.bind("<KeyRelease>", lambda _e: update_math(), add="+")
                 else:
                     new = ttk.Entry(container, textvariable=value_var, width=18)
                     new.bind("<KeyRelease>", lambda _e: update_math())
@@ -1935,7 +1935,7 @@ class MappingEditorView(ttk.Frame):
                 self._set_status_for_column(col_name)
                 self._update_preview(col_name, step)
 
-            col_entry.bind("<KeyRelease>", on_change)
+            col_entry.bind("<KeyRelease>", on_change, add="+")
             if isinstance(col_entry, ttk.Combobox):
                 col_entry.bind("<<ComboboxSelected>>", on_change)
             val_entry.bind("<KeyRelease>", on_change)
@@ -2288,7 +2288,7 @@ class MappingEditorView(ttk.Frame):
                 data_type_var.set(self._infer_extension_type(name))
 
         name_cb.bind("<<ComboboxSelected>>", on_name_change)
-        name_cb.bind("<KeyRelease>", on_name_change)
+        name_cb.bind("<KeyRelease>", on_name_change, add="+")
 
         result = {"value": None}
 
