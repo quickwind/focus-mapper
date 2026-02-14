@@ -685,8 +685,8 @@ class MappingEditorView(ttk.Frame):
             )
             self.preview_tree.heading("index", text="#", command=lambda: self._sort_preview_tree("index"))
             self.preview_tree.heading("value", text="Value", command=lambda: self._sort_preview_tree("value"))
-            self.preview_tree.column("index", width=60, anchor="e")
-            self.preview_tree.column("value", width=300)
+            self.preview_tree.column("index", width=48, anchor="e", stretch=False)
+            self.preview_tree.column("value", width=300, anchor="center")
             self._preview_base_headings = {"index": "#", "value": "Value"}
             self._preview_sort_state = {}
             self._refresh_preview_sort_headers()
@@ -741,7 +741,7 @@ class MappingEditorView(ttk.Frame):
         if not hasattr(self, "preview_tree"):
             return
         font = tkfont.nametofont("TkDefaultFont")
-        bounds = {"index": (60, 90), "value": (160, 540)}
+        bounds = {"index": (44, 72), "value": (160, 540)}
         headers = {"index": "#", "value": "Value"}
         for col, (min_w, max_w) in bounds.items():
             width = font.measure(headers[col]) + 20
