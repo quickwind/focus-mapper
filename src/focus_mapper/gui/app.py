@@ -14,6 +14,7 @@ class App(tk.Tk):
 
         self.title("Focus Mapper")
         self.geometry("1350x800")
+        self._set_app_icon()
         
         # Configure grid layout
         self.columnconfigure(1, weight=1)
@@ -152,3 +153,22 @@ class App(tk.Tk):
         """Destroy all widgets in the content container."""
         for widget in self.content_frame.winfo_children():
             widget.destroy()
+
+    def _set_app_icon(self):
+        """Set application icon from bundled PNG using cross-platform Tk APIs."""
+        icon_path = Path(__file__).resolve().parent / "assets" / "icon.png"
+        if not icon_path.exists():
+            return
+        try:
+            # On Windows, prefer .ico for the window icon if available
+            if os.name == 'nt':
+                ico_path = icon_path.with_suffix(".ico")
+                if ico_path.exists():
+                    self.iconbitmap(str(ico_path))
+                    return
+
+            # Keep a strong reference to avoid Tk image GC issues.
+            self._icon_image = tk.PhotoImage(file=str(icon_path))
+            self.iconphoto(True, self._icon_image)
+        except Exception as e:
+            print(f"Warning: Could not set app icon: {e}")

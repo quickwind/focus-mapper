@@ -28,6 +28,7 @@ shim_dir = os.path.join(project_root, 'tools', 'windows')
 # Source is relative to project root
 datas = [
     (os.path.join(project_root, 'src/focus_mapper/specs'), 'focus_mapper/specs'),
+    (os.path.join(project_root, 'src/focus_mapper/gui/assets'), 'focus_mapper/gui/assets'),
     # Include iso4217parse data files from venv site-packages
     (os.path.join(project_root, '.venv/Lib/site-packages/iso4217parse/data.json'), 'iso4217parse'),
     (os.path.join(project_root, '.venv/Lib/site-packages/iso4217parse/symbols.json'), 'iso4217parse')
@@ -147,6 +148,7 @@ exe_gui = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=os.path.join(project_root, 'src/focus_mapper/gui/assets/icon.ico'),
 )
 
 coll = COLLECT(

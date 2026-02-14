@@ -64,7 +64,7 @@ package-dir = {"" = "src"}
 include-package-data = true
 
 [tool.setuptools.package-data]
-focus_mapper = ["specs/**/*.json"]
+focus_mapper = ["specs/**/*.json", "gui/assets/**/*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
