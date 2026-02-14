@@ -17,7 +17,12 @@ from focus_mapper.format_validators import (
     validate_key_value_format,
     validate_json_object_format,
 )
-from focus_mapper.gui.ui_utils import WidgetTooltip as _WidgetTooltip, set_tooltip as _set_tooltip
+from focus_mapper.gui.ui_utils import (
+    WidgetTooltip as _WidgetTooltip,
+    set_tooltip as _set_tooltip,
+    make_combobox_filterable,
+    format_value_for_display,
+)
 
 
 def _create_star(parent, tooltip: str, **pack_opts):
@@ -1382,7 +1387,9 @@ class MappingEditorView(ttk.Frame):
             if use_column_picker and self.sample_df is not None:
                 row = ttk.Frame(parent)
                 row.pack(fill="x", pady=(0, 6))
-                cb = ttk.Combobox(row, values=list(self.sample_df.columns), state="readonly", width=width)
+                cb_values = [str(c) for c in self.sample_df.columns]
+                cb = ttk.Combobox(row, values=cb_values, state="normal", width=width)
+                make_combobox_filterable(cb, cb_values)
                 cb.pack(side="left", fill="x", expand=True)
                 input_star = _create_star(row, "Required", side="left", padx=(6, 0)) if required else None
                 if key in step and step[key] is not None:
@@ -1399,6 +1406,7 @@ class MappingEditorView(ttk.Frame):
                     self._set_status_for_column(col_name)
                     self._update_preview(col_name, step)
                 cb.bind("<<ComboboxSelected>>", on_select)
+                cb.bind("<KeyRelease>", on_select)
                 _set_tooltip(cb, tooltip)
                 on_select()
                 return cb
@@ -1462,7 +1470,9 @@ class MappingEditorView(ttk.Frame):
             btns.pack(side="left", padx=6, fill="y")
 
             if self.sample_df is not None:
-                entry = ttk.Combobox(btns, values=list(self.sample_df.columns), state="readonly", width=16)
+                entry_values = [str(c) for c in self.sample_df.columns]
+                entry = ttk.Combobox(btns, values=entry_values, state="normal", width=16)
+                make_combobox_filterable(entry, entry_values)
             else:
                 entry = ttk.Entry(btns, width=16)
             entry.pack(pady=(0, 4))
@@ -1829,10 +1839,13 @@ class MappingEditorView(ttk.Frame):
                 for w in container.winfo_children():
                     w.destroy()
                 if self.sample_df is not None and operand_type.get() == "column":
-                    new = ttk.Combobox(container, values=list(self.sample_df.columns), state="readonly", width=18)
+                    new_values = [str(c) for c in self.sample_df.columns]
+                    new = ttk.Combobox(container, values=new_values, state="normal", width=18)
+                    make_combobox_filterable(new, new_values)
                     if value_var.get():
                         new.set(value_var.get())
                     new.bind("<<ComboboxSelected>>", lambda _e: update_math())
+                    new.bind("<KeyRelease>", lambda _e: update_math())
                 else:
                     new = ttk.Entry(container, textvariable=value_var, width=18)
                     new.bind("<KeyRelease>", lambda _e: update_math())
@@ -1865,7 +1878,12 @@ class MappingEditorView(ttk.Frame):
             cond = ttk.Frame(parent)
             cond.pack(fill="x", pady=(0, 6))
             ttk.Label(cond, text="if column").pack(side="left")
-            col_entry = ttk.Combobox(cond, values=list(self.sample_df.columns), state="readonly", width=20) if self.sample_df is not None else ttk.Entry(cond, width=20)
+            if self.sample_df is not None:
+                col_values = [str(c) for c in self.sample_df.columns]
+                col_entry = ttk.Combobox(cond, values=col_values, state="normal", width=20)
+                make_combobox_filterable(col_entry, col_values)
+            else:
+                col_entry = ttk.Entry(cond, width=20)
             col_entry.pack(side="left", padx=4)
             ttk.Label(cond, text="==").pack(side="left")
             val_entry = ttk.Entry(cond, width=20)
@@ -2124,7 +2142,7 @@ class MappingEditorView(ttk.Frame):
             else:
                 series = apply_steps(self.sample_df, steps=[step_preview], target=col_name)
             for idx, val in enumerate(series.head(100).tolist(), start=1):
-                self.preview_tree.insert("", "end", values=(idx, str(val)))
+                self.preview_tree.insert("", "end", values=(idx, format_value_for_display(val)))
             self._autosize_preview_tree_columns()
         except Exception as e:
             self.preview_error.config(text=str(e))
@@ -2146,7 +2164,7 @@ class MappingEditorView(ttk.Frame):
             series = apply_steps(self.sample_df, steps=[step], target=col_name)
             if hasattr(self, "preview_tree"):
                 for idx, val in enumerate(series.head(100).tolist(), start=1):
-                    self.preview_tree.insert("", "end", values=(idx, str(val)))
+                    self.preview_tree.insert("", "end", values=(idx, format_value_for_display(val)))
                 self._autosize_preview_tree_columns()
         except Exception as e:
             err = str(e)
@@ -2233,8 +2251,9 @@ class MappingEditorView(ttk.Frame):
 
         ttk.Label(content, text="Column Name:").grid(row=0, column=0, sticky="w", pady=4)
         name_var = tk.StringVar()
-        name_values = list(self.sample_df.columns) if self.sample_df is not None else []
+        name_values = [str(c) for c in self.sample_df.columns] if self.sample_df is not None else []
         name_cb = ttk.Combobox(content, textvariable=name_var, values=name_values, width=40)
+        make_combobox_filterable(name_cb, name_values)
         name_cb.grid(row=0, column=1, sticky="w", pady=4)
         _set_tooltip(name_cb, "Choose from sample data or type a new extension column name.")
 
