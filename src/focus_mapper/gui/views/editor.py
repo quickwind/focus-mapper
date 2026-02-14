@@ -635,15 +635,61 @@ class MappingEditorView(ttk.Frame):
         config_header.pack(fill="x", padx=8, pady=(8, 4))
         config_header.columnconfigure(1, weight=1)
         ttk.Label(config_header, text="Operation Type:").grid(row=0, column=0, sticky="w")
+        op_descriptions = self._operation_descriptions()
+        op_options = self._available_operation_types(col_name)
         self.op_var = tk.StringVar(value=(rule.steps[0].get("op") if rule.steps else ""))
-        op_entry = ttk.Entry(config_header, textvariable=self.op_var, state="readonly", width=24)
-        op_entry.grid(row=0, column=1, sticky="ew", padx=6)
+        op_cb = ttk.Combobox(config_header, textvariable=self.op_var, values=op_options, state="normal", width=24)
+        make_combobox_filterable(op_cb, op_options)
+        op_cb.grid(row=0, column=1, sticky="ew", padx=6)
 
-        def pick_op():
-            op = self._pick_operation_type(current=self.op_var.get() or None)
-            if op is None:
+        help_text_var = tk.StringVar(value=op_descriptions.get(self.op_var.get(), ""))
+        op_help = ttk.Label(lf, textvariable=help_text_var, foreground="#555")
+        op_help.pack(anchor="w", padx=10, pady=(0, 4))
+        op_tip = _WidgetTooltip(op_cb)
+
+        def current_op_tip_text() -> str:
+            typed = (self.op_var.get() or "").strip()
+            match = next((item for item in op_options if item.lower() == typed.lower()), None)
+            if match:
+                return op_descriptions.get(match, "Choose operation type.")
+            return "Choose operation type (type to filter by prefix)."
+
+        def show_op_tip(_event=None):
+            op_tip.show(current_op_tip_text())
+
+        def hide_op_tip(_event=None):
+            op_tip.hide()
+
+        def ensure_op_item_tooltips():
+            """Bind hover tooltips to combobox dropdown list items."""
+            try:
+                popdown = op_cb.tk.call("ttk::combobox::PopdownWindow", str(op_cb))
+                listbox = op_cb.nametowidget(f"{popdown}.f.l")
+            except Exception:
                 return
-            self.op_var.set(op)
+            if getattr(op_cb, "_op_item_tooltip_bound", False):
+                return
+            item_tip = _WidgetTooltip(listbox)
+
+            def on_item_motion(event):
+                try:
+                    idx = listbox.nearest(event.y)
+                    item = str(listbox.get(idx))
+                except Exception:
+                    item_tip.hide()
+                    return
+                text = op_descriptions.get(item, "")
+                if text:
+                    item_tip.show(text)
+                else:
+                    item_tip.hide()
+
+            listbox.bind("<Motion>", on_item_motion, add="+")
+            listbox.bind("<Leave>", lambda _e: item_tip.hide(), add="+")
+            listbox.bind("<ButtonRelease-1>", lambda _e: item_tip.hide(), add="+")
+            op_cb._op_item_tooltip_bound = True
+
+        def apply_selected_op(op: str):
             step = {"op": op}
             self._set_single_step(col_name, step)
             self._render_op_config(config_container, col_name, step, spec_col)
@@ -654,17 +700,47 @@ class MappingEditorView(ttk.Frame):
                     self.preview_frame.pack(fill="both", expand=False, padx=5, pady=5)
                     self._update_preview(col_name, step)
 
+        def on_op_change(_event=None):
+            typed = (self.op_var.get() or "").strip()
+            if not typed:
+                help_text_var.set("")
+                return
+            match = next((item for item in op_options if item.lower() == typed.lower()), None)
+            if not match:
+                help_text_var.set("Select one of the available operation types.")
+                if op_cb.focus_get() == op_cb:
+                    show_op_tip()
+                return
+            if self.op_var.get() != match:
+                self.op_var.set(match)
+            desc = op_descriptions.get(match, "")
+            help_text_var.set(desc)
+            existing = rule.steps[0] if rule.steps and rule.steps[0].get("op") == match else None
+            if existing is None:
+                apply_selected_op(match)
+            if op_cb.focus_get() == op_cb:
+                show_op_tip()
+
         def clear_op():
             self.op_var.set("")
+            help_text_var.set("")
             self._set_single_step(col_name, None)
             for w in config_container.winfo_children():
                 w.destroy()
             if hasattr(self, "preview_frame"):
                 self.preview_frame.pack_forget()
+            hide_op_tip()
 
-        op_entry.bind("<Button-1>", lambda _e: pick_op())
-        ttk.Button(config_header, text="▼", width=2, command=pick_op).grid(row=0, column=2, padx=(0, 6))
-        ttk.Button(config_header, text="Clear", command=clear_op).grid(row=0, column=3)
+        op_cb.bind("<Enter>", show_op_tip)
+        op_cb.bind("<Leave>", hide_op_tip)
+        op_cb.bind("<FocusIn>", show_op_tip)
+        op_cb.bind("<FocusOut>", hide_op_tip)
+        op_cb.bind("<Button-1>", lambda _e: op_cb.after_idle(ensure_op_item_tooltips), add="+")
+        op_cb.bind("<Down>", lambda _e: op_cb.after_idle(ensure_op_item_tooltips), add="+")
+        op_cb.bind("<KeyRelease>", lambda _e: op_cb.after_idle(ensure_op_item_tooltips), add="+")
+        op_cb.bind("<<ComboboxSelected>>", on_op_change)
+        op_cb.bind("<KeyRelease>", on_op_change, add="+")
+        ttk.Button(config_header, text="Clear", command=clear_op).grid(row=0, column=2, padx=(0, 6))
 
         # Config container
         config_container = ttk.Frame(lf)
@@ -754,6 +830,28 @@ class MappingEditorView(ttk.Frame):
 
     def _pick_operation_type(self, current: str | None = None) -> str | None:
         """Open operation picker and return selected operation name."""
+        options = self._available_operation_types(self.current_column or "")
+        descriptions = self._operation_descriptions()
+        picker = _OpPicker(self, options, descriptions)
+        return picker.show("Add Operation", current=current)
+
+    def _operation_descriptions(self) -> dict[str, str]:
+        """Return operation descriptions used by tooltips/help text."""
+        return {
+            "from_column": "Use a single input column as the value.",
+            "const": "Use a constant value for all rows.",
+            "null": "Set all values to null.",
+            "coalesce": "Use the first non-null value from a list of columns.",
+            "map_values": "Map source values using a lookup table.",
+            "concat": "Concatenate multiple columns into one string.",
+            "math": "Compute arithmetic across columns/const values.",
+            "when": "Conditional assignment based on a column value.",
+            "sql": "DuckDB SQL expression or query.",
+            "pandas_expr": "Pandas expression evaluated against the DataFrame.",
+        }
+
+    def _available_operation_types(self, col_name: str) -> list[str]:
+        """Return operations allowed for the selected column."""
         options = [
             "from_column",
             "const",
@@ -766,25 +864,11 @@ class MappingEditorView(ttk.Frame):
             "sql",
             "pandas_expr",
         ]
-        descriptions = {
-            "from_column": "Use a single input column as the value.",
-            "const": "Use a constant value for all rows.",
-            "null": "Set all values to null.",
-            "coalesce": "Use the first non-null value from a list of columns.",
-            "map_values": "Map source values using a lookup table.",
-            "concat": "Concatenate multiple columns into one string.",
-            "math": "Compute arithmetic across columns/const values.",
-            "when": "Conditional assignment based on a column value.",
-            "sql": "DuckDB SQL expression or query.",
-            "pandas_expr": "Pandas expression evaluated against the DataFrame.",
-        }
-        if self.spec and self.current_column:
-            spec_col = self.spec.get_column(self.current_column)
-            if spec_col and not spec_col.allows_nulls:
-                if "null" in options:
-                    options.remove("null")
-        picker = _OpPicker(self, options, descriptions)
-        return picker.show("Add Operation", current=current)
+        if self.spec and col_name:
+            spec_col = self.spec.get_column(col_name)
+            if spec_col and not spec_col.allows_nulls and "null" in options:
+                options.remove("null")
+        return options
 
     def _set_single_step(self, col_name: str, step: dict | None) -> None:
         """Set (or clear) the single supported transformation step for target."""
