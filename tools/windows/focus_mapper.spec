@@ -137,7 +137,7 @@ splash = Splash(
     os.path.join(project_root, 'src/focus_mapper/gui/assets/splash.png'),
     binaries=a_gui.binaries,
     datas=a_gui.datas,
-    text_pos=(10, 380),
+    text_pos=(10, 600),
     text_size=12,
     text_color='white',
     text_default='Initializing...',
