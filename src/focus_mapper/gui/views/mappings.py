@@ -26,6 +26,7 @@ class MappingsListView(ttk.Frame):
         self._sort_state = {}
         self._base_headings = {
             "filename": "File Name",
+            "spec_version": "Spec Version",
             "dataset_type": "Dataset Type",
             "dataset_instance": "Dataset Instance Name",
             "column_count": "Column Count",
@@ -83,15 +84,27 @@ class MappingsListView(ttk.Frame):
 
 
         # Mappings List (Treeview)
-        columns = ("filename", "dataset_type", "dataset_instance", "column_count", "status", "modified")
+        columns = ("filename", "spec_version", "dataset_type", "dataset_instance", "column_count", "status", "modified")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", selectmode="browse")
+        
         self.tree.heading("filename", text="File Name", command=lambda: self._sort_tree("filename"))
-        self.tree.heading("dataset_type", text="Dataset Type", command=lambda: self._sort_tree("dataset_type"))
-        self.tree.heading("dataset_instance", text="Dataset Instance Name", command=lambda: self._sort_tree("dataset_instance"))
-        self.tree.heading("column_count", text="Column Count", command=lambda: self._sort_tree("column_count"))
-        self.tree.heading("status", text="Status", command=lambda: self._sort_tree("status"))
-        self.tree.heading("modified", text="Last Modified Time", command=lambda: self._sort_tree("modified"))
-        self.tree.column("filename", width=220)
+        self.tree.column("filename", width=220, anchor="w")  # File Name left aligned
+        
+        # Center align all other columns
+        center_cols = {
+            "spec_version": "Spec Version",
+            "dataset_type": "Dataset Type",
+            "dataset_instance": "Dataset Instance Name",
+            "column_count": "Column Count",
+            "status": "Status",
+            "modified": "Last Modified Time"
+        }
+        
+        for col, title in center_cols.items():
+            self.tree.heading(col, text=title, command=lambda c=col: self._sort_tree(c))
+            self.tree.column(col, anchor="center")
+
+        self.tree.column("spec_version", width=100)
         self.tree.column("dataset_type", width=130)
         self.tree.column("dataset_instance", width=200)
         self.tree.column("column_count", width=110)
@@ -165,7 +178,7 @@ class MappingsListView(ttk.Frame):
                 "",
                 "end",
                 iid=str(file_path),
-                values=(file_path.name, dataset_type, dataset_instance_name, column_count, status, dt),
+                values=(file_path.name, spec_ver, dataset_type, dataset_instance_name, column_count, status, dt),
                 tags=("not_ready",) if status == "Not Ready" else (),
             )
         self.tree.tag_configure("not_ready", foreground="red")
@@ -192,6 +205,7 @@ class MappingsListView(ttk.Frame):
         """Adjust table column widths to content within sensible bounds."""
         min_w = {
             "filename": 180,
+            "spec_version": 90,
             "dataset_type": 120,
             "dataset_instance": 180,
             "column_count": 110,
@@ -200,6 +214,7 @@ class MappingsListView(ttk.Frame):
         }
         max_w = {
             "filename": 360,
+            "spec_version": 120,
             "dataset_type": 220,
             "dataset_instance": 320,
             "column_count": 150,

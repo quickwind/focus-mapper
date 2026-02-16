@@ -5,6 +5,7 @@ from tkinter import ttk
 import json
 import os
 from pathlib import Path
+from focus_mapper.gui.ui_utils import set_tooltip
 
 class App(tk.Tk):
     """Main GUI application window and view router."""
@@ -46,12 +47,22 @@ class App(tk.Tk):
         ttk.Label(self.nav_frame, text="Focus Mapper", font=("Helvetica", 16, "bold")).pack(pady=(0, 20))
         
         # Navigation Buttons
-        ttk.Button(self.nav_frame, text="Mappings", command=self.show_mappings_view).pack(fill="x", pady=5)
-        ttk.Button(self.nav_frame, text="Generator", command=self.show_generator_view).pack(fill="x", pady=5)
-        ttk.Button(self.nav_frame, text="Validator", command=self.show_validator_view).pack(fill="x", pady=5)
+        btn_mappings = ttk.Button(self.nav_frame, text="Mappings", command=self.show_mappings_view)
+        btn_mappings.pack(fill="x", pady=5)
+        set_tooltip(btn_mappings, "Manage and edit mapping configuration YAML files")
+
+        btn_generator = ttk.Button(self.nav_frame, text="Generator", command=self.show_generator_view)
+        btn_generator.pack(fill="x", pady=5)
+        set_tooltip(btn_generator, "Generate FOCUS datasets from source data and mappings YAML")
+
+        btn_validator = ttk.Button(self.nav_frame, text="Validator", command=self.show_validator_view)
+        btn_validator.pack(fill="x", pady=5)
+        set_tooltip(btn_validator, "Validate data against rules")
         
         ttk.Separator(self.nav_frame, orient="horizontal").pack(fill="x", pady=20)
-        ttk.Button(self.nav_frame, text="Settings", command=self.show_settings_view).pack(fill="x", pady=5)
+        btn_settings = ttk.Button(self.nav_frame, text="Settings", command=self.show_settings_view)
+        btn_settings.pack(fill="x", pady=5)
+        set_tooltip(btn_settings, "Application configuration")
 
         # App icon centered in remaining space below nav buttons
         icon_path = Path(__file__).resolve().parent / "assets" / "icon.png"
