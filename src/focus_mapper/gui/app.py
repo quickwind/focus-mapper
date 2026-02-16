@@ -53,6 +53,20 @@ class App(tk.Tk):
         ttk.Separator(self.nav_frame, orient="horizontal").pack(fill="x", pady=20)
         ttk.Button(self.nav_frame, text="Settings", command=self.show_settings_view).pack(fill="x", pady=5)
 
+        # App icon centered in remaining space below nav buttons
+        icon_path = Path(__file__).resolve().parent / "assets" / "icon.png"
+        if icon_path.exists():
+            try:
+                self._nav_icon_image = tk.PhotoImage(file=str(icon_path))
+                # Subsample to ~128x128 (256/2)
+                if self._nav_icon_image.width() > 150:
+                    self._nav_icon_image = self._nav_icon_image.subsample(2, 2)
+                
+                icon_label = ttk.Label(self.nav_frame, image=self._nav_icon_image)
+                icon_label.pack(expand=True)
+            except Exception:
+                pass
+
     def _show_welcome_view(self):
         """Initialize local app directories and show default view."""
         # Determine the user home directory and settings path
