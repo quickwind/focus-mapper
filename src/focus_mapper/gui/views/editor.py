@@ -17,7 +17,12 @@ from focus_mapper.format_validators import (
     validate_key_value_format,
     validate_json_object_format,
 )
-from focus_mapper.gui.ui_utils import WidgetTooltip as _WidgetTooltip, set_tooltip as _set_tooltip
+from focus_mapper.gui.ui_utils import (
+    WidgetTooltip as _WidgetTooltip,
+    set_tooltip as _set_tooltip,
+    make_combobox_filterable,
+    format_value_for_display,
+)
 
 
 def _create_star(parent, tooltip: str, **pack_opts):
@@ -630,15 +635,61 @@ class MappingEditorView(ttk.Frame):
         config_header.pack(fill="x", padx=8, pady=(8, 4))
         config_header.columnconfigure(1, weight=1)
         ttk.Label(config_header, text="Operation Type:").grid(row=0, column=0, sticky="w")
+        op_descriptions = self._operation_descriptions()
+        op_options = self._available_operation_types(col_name)
         self.op_var = tk.StringVar(value=(rule.steps[0].get("op") if rule.steps else ""))
-        op_entry = ttk.Entry(config_header, textvariable=self.op_var, state="readonly", width=24)
-        op_entry.grid(row=0, column=1, sticky="ew", padx=6)
+        op_cb = ttk.Combobox(config_header, textvariable=self.op_var, values=op_options, state="normal", width=24)
+        make_combobox_filterable(op_cb, op_options)
+        op_cb.grid(row=0, column=1, sticky="ew", padx=6)
 
-        def pick_op():
-            op = self._pick_operation_type(current=self.op_var.get() or None)
-            if op is None:
+        help_text_var = tk.StringVar(value=op_descriptions.get(self.op_var.get(), ""))
+        op_help = ttk.Label(lf, textvariable=help_text_var, foreground="#555")
+        op_help.pack(anchor="w", padx=10, pady=(0, 4))
+        op_tip = _WidgetTooltip(op_cb)
+
+        def current_op_tip_text() -> str:
+            typed = (self.op_var.get() or "").strip()
+            match = next((item for item in op_options if item.lower() == typed.lower()), None)
+            if match:
+                return op_descriptions.get(match, "Choose operation type.")
+            return "Choose operation type (type to filter by prefix)."
+
+        def show_op_tip(_event=None):
+            op_tip.show(current_op_tip_text())
+
+        def hide_op_tip(_event=None):
+            op_tip.hide()
+
+        def ensure_op_item_tooltips():
+            """Bind hover tooltips to combobox dropdown list items."""
+            try:
+                popdown = op_cb.tk.call("ttk::combobox::PopdownWindow", str(op_cb))
+                listbox = op_cb.nametowidget(f"{popdown}.f.l")
+            except Exception:
                 return
-            self.op_var.set(op)
+            if getattr(op_cb, "_op_item_tooltip_bound", False):
+                return
+            item_tip = _WidgetTooltip(listbox)
+
+            def on_item_motion(event):
+                try:
+                    idx = listbox.nearest(event.y)
+                    item = str(listbox.get(idx))
+                except Exception:
+                    item_tip.hide()
+                    return
+                text = op_descriptions.get(item, "")
+                if text:
+                    item_tip.show(text)
+                else:
+                    item_tip.hide()
+
+            listbox.bind("<Motion>", on_item_motion, add="+")
+            listbox.bind("<Leave>", lambda _e: item_tip.hide(), add="+")
+            listbox.bind("<ButtonRelease-1>", lambda _e: item_tip.hide(), add="+")
+            op_cb._op_item_tooltip_bound = True
+
+        def apply_selected_op(op: str):
             step = {"op": op}
             self._set_single_step(col_name, step)
             self._render_op_config(config_container, col_name, step, spec_col)
@@ -649,17 +700,47 @@ class MappingEditorView(ttk.Frame):
                     self.preview_frame.pack(fill="both", expand=False, padx=5, pady=5)
                     self._update_preview(col_name, step)
 
+        def on_op_change(_event=None):
+            typed = (self.op_var.get() or "").strip()
+            if not typed:
+                help_text_var.set("")
+                return
+            match = next((item for item in op_options if item.lower() == typed.lower()), None)
+            if not match:
+                help_text_var.set("Select one of the available operation types.")
+                if op_cb.focus_get() == op_cb:
+                    show_op_tip()
+                return
+            if self.op_var.get() != match:
+                self.op_var.set(match)
+            desc = op_descriptions.get(match, "")
+            help_text_var.set(desc)
+            existing = rule.steps[0] if rule.steps and rule.steps[0].get("op") == match else None
+            if existing is None:
+                apply_selected_op(match)
+            if op_cb.focus_get() == op_cb:
+                show_op_tip()
+
         def clear_op():
             self.op_var.set("")
+            help_text_var.set("")
             self._set_single_step(col_name, None)
             for w in config_container.winfo_children():
                 w.destroy()
             if hasattr(self, "preview_frame"):
                 self.preview_frame.pack_forget()
+            hide_op_tip()
 
-        op_entry.bind("<Button-1>", lambda _e: pick_op())
-        ttk.Button(config_header, text="▼", width=2, command=pick_op).grid(row=0, column=2, padx=(0, 6))
-        ttk.Button(config_header, text="Clear", command=clear_op).grid(row=0, column=3)
+        op_cb.bind("<Enter>", show_op_tip)
+        op_cb.bind("<Leave>", hide_op_tip)
+        op_cb.bind("<FocusIn>", show_op_tip)
+        op_cb.bind("<FocusOut>", hide_op_tip)
+        op_cb.bind("<Button-1>", lambda _e: op_cb.after_idle(ensure_op_item_tooltips), add="+")
+        op_cb.bind("<Down>", lambda _e: op_cb.after_idle(ensure_op_item_tooltips), add="+")
+        op_cb.bind("<KeyRelease>", lambda _e: op_cb.after_idle(ensure_op_item_tooltips), add="+")
+        op_cb.bind("<<ComboboxSelected>>", on_op_change)
+        op_cb.bind("<KeyRelease>", on_op_change, add="+")
+        ttk.Button(config_header, text="Clear", command=clear_op).grid(row=0, column=2, padx=(0, 6))
 
         # Config container
         config_container = ttk.Frame(lf)
@@ -680,8 +761,8 @@ class MappingEditorView(ttk.Frame):
             )
             self.preview_tree.heading("index", text="#", command=lambda: self._sort_preview_tree("index"))
             self.preview_tree.heading("value", text="Value", command=lambda: self._sort_preview_tree("value"))
-            self.preview_tree.column("index", width=60, anchor="e")
-            self.preview_tree.column("value", width=300)
+            self.preview_tree.column("index", width=48, anchor="e", stretch=False)
+            self.preview_tree.column("value", width=300, anchor="center")
             self._preview_base_headings = {"index": "#", "value": "Value"}
             self._preview_sort_state = {}
             self._refresh_preview_sort_headers()
@@ -736,7 +817,7 @@ class MappingEditorView(ttk.Frame):
         if not hasattr(self, "preview_tree"):
             return
         font = tkfont.nametofont("TkDefaultFont")
-        bounds = {"index": (60, 90), "value": (160, 540)}
+        bounds = {"index": (44, 72), "value": (160, 540)}
         headers = {"index": "#", "value": "Value"}
         for col, (min_w, max_w) in bounds.items():
             width = font.measure(headers[col]) + 20
@@ -749,6 +830,28 @@ class MappingEditorView(ttk.Frame):
 
     def _pick_operation_type(self, current: str | None = None) -> str | None:
         """Open operation picker and return selected operation name."""
+        options = self._available_operation_types(self.current_column or "")
+        descriptions = self._operation_descriptions()
+        picker = _OpPicker(self, options, descriptions)
+        return picker.show("Add Operation", current=current)
+
+    def _operation_descriptions(self) -> dict[str, str]:
+        """Return operation descriptions used by tooltips/help text."""
+        return {
+            "from_column": "Use a single input column as the value.",
+            "const": "Use a constant value for all rows.",
+            "null": "Set all values to null.",
+            "coalesce": "Use the first non-null value from a list of columns.",
+            "map_values": "Map source values using a lookup table.",
+            "concat": "Concatenate multiple columns into one string.",
+            "math": "Compute arithmetic across columns/const values.",
+            "when": "Conditional assignment based on a column value.",
+            "sql": "DuckDB SQL expression or query.",
+            "pandas_expr": "Pandas expression evaluated against the DataFrame.",
+        }
+
+    def _available_operation_types(self, col_name: str) -> list[str]:
+        """Return operations allowed for the selected column."""
         options = [
             "from_column",
             "const",
@@ -761,25 +864,11 @@ class MappingEditorView(ttk.Frame):
             "sql",
             "pandas_expr",
         ]
-        descriptions = {
-            "from_column": "Use a single input column as the value.",
-            "const": "Use a constant value for all rows.",
-            "null": "Set all values to null.",
-            "coalesce": "Use the first non-null value from a list of columns.",
-            "map_values": "Map source values using a lookup table.",
-            "concat": "Concatenate multiple columns into one string.",
-            "math": "Compute arithmetic across columns/const values.",
-            "when": "Conditional assignment based on a column value.",
-            "sql": "DuckDB SQL expression or query.",
-            "pandas_expr": "Pandas expression evaluated against the DataFrame.",
-        }
-        if self.spec and self.current_column:
-            spec_col = self.spec.get_column(self.current_column)
-            if spec_col and not spec_col.allows_nulls:
-                if "null" in options:
-                    options.remove("null")
-        picker = _OpPicker(self, options, descriptions)
-        return picker.show("Add Operation", current=current)
+        if self.spec and col_name:
+            spec_col = self.spec.get_column(col_name)
+            if spec_col and not spec_col.allows_nulls and "null" in options:
+                options.remove("null")
+        return options
 
     def _set_single_step(self, col_name: str, step: dict | None) -> None:
         """Set (or clear) the single supported transformation step for target."""
@@ -1382,7 +1471,9 @@ class MappingEditorView(ttk.Frame):
             if use_column_picker and self.sample_df is not None:
                 row = ttk.Frame(parent)
                 row.pack(fill="x", pady=(0, 6))
-                cb = ttk.Combobox(row, values=list(self.sample_df.columns), state="readonly", width=width)
+                cb_values = [str(c) for c in self.sample_df.columns]
+                cb = ttk.Combobox(row, values=cb_values, state="normal", width=width)
+                make_combobox_filterable(cb, cb_values)
                 cb.pack(side="left", fill="x", expand=True)
                 input_star = _create_star(row, "Required", side="left", padx=(6, 0)) if required else None
                 if key in step and step[key] is not None:
@@ -1399,6 +1490,7 @@ class MappingEditorView(ttk.Frame):
                     self._set_status_for_column(col_name)
                     self._update_preview(col_name, step)
                 cb.bind("<<ComboboxSelected>>", on_select)
+                cb.bind("<KeyRelease>", on_select, add="+")
                 _set_tooltip(cb, tooltip)
                 on_select()
                 return cb
@@ -1462,7 +1554,9 @@ class MappingEditorView(ttk.Frame):
             btns.pack(side="left", padx=6, fill="y")
 
             if self.sample_df is not None:
-                entry = ttk.Combobox(btns, values=list(self.sample_df.columns), state="readonly", width=16)
+                entry_values = [str(c) for c in self.sample_df.columns]
+                entry = ttk.Combobox(btns, values=entry_values, state="normal", width=16)
+                make_combobox_filterable(entry, entry_values)
             else:
                 entry = ttk.Entry(btns, width=16)
             entry.pack(pady=(0, 4))
@@ -1829,10 +1923,13 @@ class MappingEditorView(ttk.Frame):
                 for w in container.winfo_children():
                     w.destroy()
                 if self.sample_df is not None and operand_type.get() == "column":
-                    new = ttk.Combobox(container, values=list(self.sample_df.columns), state="readonly", width=18)
+                    new_values = [str(c) for c in self.sample_df.columns]
+                    new = ttk.Combobox(container, values=new_values, state="normal", width=18)
+                    make_combobox_filterable(new, new_values)
                     if value_var.get():
                         new.set(value_var.get())
                     new.bind("<<ComboboxSelected>>", lambda _e: update_math())
+                    new.bind("<KeyRelease>", lambda _e: update_math(), add="+")
                 else:
                     new = ttk.Entry(container, textvariable=value_var, width=18)
                     new.bind("<KeyRelease>", lambda _e: update_math())
@@ -1865,7 +1962,12 @@ class MappingEditorView(ttk.Frame):
             cond = ttk.Frame(parent)
             cond.pack(fill="x", pady=(0, 6))
             ttk.Label(cond, text="if column").pack(side="left")
-            col_entry = ttk.Combobox(cond, values=list(self.sample_df.columns), state="readonly", width=20) if self.sample_df is not None else ttk.Entry(cond, width=20)
+            if self.sample_df is not None:
+                col_values = [str(c) for c in self.sample_df.columns]
+                col_entry = ttk.Combobox(cond, values=col_values, state="normal", width=20)
+                make_combobox_filterable(col_entry, col_values)
+            else:
+                col_entry = ttk.Entry(cond, width=20)
             col_entry.pack(side="left", padx=4)
             ttk.Label(cond, text="==").pack(side="left")
             val_entry = ttk.Entry(cond, width=20)
@@ -1917,7 +2019,7 @@ class MappingEditorView(ttk.Frame):
                 self._set_status_for_column(col_name)
                 self._update_preview(col_name, step)
 
-            col_entry.bind("<KeyRelease>", on_change)
+            col_entry.bind("<KeyRelease>", on_change, add="+")
             if isinstance(col_entry, ttk.Combobox):
                 col_entry.bind("<<ComboboxSelected>>", on_change)
             val_entry.bind("<KeyRelease>", on_change)
@@ -2124,7 +2226,7 @@ class MappingEditorView(ttk.Frame):
             else:
                 series = apply_steps(self.sample_df, steps=[step_preview], target=col_name)
             for idx, val in enumerate(series.head(100).tolist(), start=1):
-                self.preview_tree.insert("", "end", values=(idx, str(val)))
+                self.preview_tree.insert("", "end", values=(idx, format_value_for_display(val)))
             self._autosize_preview_tree_columns()
         except Exception as e:
             self.preview_error.config(text=str(e))
@@ -2146,7 +2248,7 @@ class MappingEditorView(ttk.Frame):
             series = apply_steps(self.sample_df, steps=[step], target=col_name)
             if hasattr(self, "preview_tree"):
                 for idx, val in enumerate(series.head(100).tolist(), start=1):
-                    self.preview_tree.insert("", "end", values=(idx, str(val)))
+                    self.preview_tree.insert("", "end", values=(idx, format_value_for_display(val)))
                 self._autosize_preview_tree_columns()
         except Exception as e:
             err = str(e)
@@ -2233,8 +2335,9 @@ class MappingEditorView(ttk.Frame):
 
         ttk.Label(content, text="Column Name:").grid(row=0, column=0, sticky="w", pady=4)
         name_var = tk.StringVar()
-        name_values = list(self.sample_df.columns) if self.sample_df is not None else []
+        name_values = [str(c) for c in self.sample_df.columns] if self.sample_df is not None else []
         name_cb = ttk.Combobox(content, textvariable=name_var, values=name_values, width=40)
+        make_combobox_filterable(name_cb, name_values)
         name_cb.grid(row=0, column=1, sticky="w", pady=4)
         _set_tooltip(name_cb, "Choose from sample data or type a new extension column name.")
 
@@ -2269,7 +2372,7 @@ class MappingEditorView(ttk.Frame):
                 data_type_var.set(self._infer_extension_type(name))
 
         name_cb.bind("<<ComboboxSelected>>", on_name_change)
-        name_cb.bind("<KeyRelease>", on_name_change)
+        name_cb.bind("<KeyRelease>", on_name_change, add="+")
 
         result = {"value": None}
 
@@ -2328,6 +2431,16 @@ class MappingEditorView(ttk.Frame):
         if source_column:
             initial_step = {"op": "from_column", "column": source_column}
         if name not in self.rules_dict:
+            # Insert tree row first so _set_status_for_column can find it
+            nullable_display = "Yes" if nullable else "No"
+            self.tree.insert(
+                "",
+                "end",
+                iid=name,
+                text=name,
+                values=("-", "Extension", data_type or "-", nullable_display),
+            )
+            self._col_descriptions[name] = description or ""
             self.create_rule(
                 name,
                 data_type=data_type,
@@ -2335,19 +2448,9 @@ class MappingEditorView(ttk.Frame):
                 initial_step=initial_step,
                 nullable=nullable,
             )
-            # Add to tree
-            status, tags = self._status_for_column(name)
-            nullable_display = "Yes" if nullable else "No"
-            self.tree.insert(
-                "",
-                "end",
-                iid=name,
-                text=name,
-                values=(status, "Extension", data_type or "-", nullable_display),
-                tags=tags,
-            )
-            self._col_descriptions[name] = description or ""
+            # Select and scroll into view
             self.tree.selection_set(name)
+            self.tree.see(name)
 
     def on_save(self):
         """Validate editor state and persist mapping YAML to disk."""

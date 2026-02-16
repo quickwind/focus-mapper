@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-02-16
+
+### Added
+- **Desktop GUI Application** (`focus-mapper-gui`): A Tkinter-based desktop application for managing mappings and running generation/validation workflows.
+  - **Mappings View**: Table-based mapping file manager with status indicators, quick actions (Edit, Generate, Delete), and search/filter capabilities.
+  - **Mapping Editor**: Visual YAML editor with:
+    - Column table showing status, feature level, data type, and nullability
+    - Interactive operation configuration with filterable comboboxes and live help text
+    - Transformation preview panel showing first 100 rows
+    - Extension column metadata editor (data type, description, nullable)
+    - Validation override configuration UI
+  - **Generator View**: Dataset generation interface with:
+    - Output preview table (first 100 rows)
+    - Real-time progress logs
+    - Validation report viewer
+  - **Settings**: Persistent application settings (e.g., external spec directory path)
+  - **Application Icon**: Custom Dell Blue (#0076CE) branded icon with Target Reticle + Line Chart + Dollar Sign design
+- **Enhanced UI Components**:
+  - Filterable comboboxes with prefix-based autocomplete and auto-dropdown
+  - Operation type tooltips showing descriptions on hover
+  - Dynamic help text for selected operations
+  - Improved datetime and value formatting across all UI views
+- **Documentation**: Added Mermaid architecture diagram to README showing component workflows
+
+### Fixed
+- **Extension Column Display Bug**: Fixed issue where only the first added extension column appeared in the editor's column table. Subsequent extension columns are now properly inserted and scrolled into view.
+- **Preview Table Layout**: Adjusted preview tree column widths and alignment for better readability
+
+### Changed
+- **Datetime Handling**: Extracted datetime utilities into dedicated `datetime_utils` module and ensured consistent UTC timezone handling across CSV export, type conversion, and SQL operations
+- **PyInstaller Build**: Simplified Windows build spec by removing redundant `COLLECT` and `exe_gui` definitions
+- **Wizard Workflow**: Streamlined step configuration by removing explicit 'done' input and simplifying multi-step flow logic
+
 ## [0.6.0] - 2026-02-09
 
 ### Added

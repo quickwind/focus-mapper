@@ -135,8 +135,10 @@ pyz_gui = PYZ(a_gui.pure, a_gui.zipped_data, cipher=block_cipher)
 exe_gui = EXE(
     pyz_gui,
     a_gui.scripts,
+    a_gui.binaries,
+    a_gui.zipfiles,
+    a_gui.datas,
     [],
-    exclude_binaries=True,
     name='focus-mapper-gui',
     debug=False,
     bootloader_ignore_signals=False,
@@ -149,23 +151,4 @@ exe_gui = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=os.path.join(project_root, 'src/focus_mapper/gui/assets/icon.ico'),
-)
-
-coll = COLLECT(
-    exe_cli,
-    exe_wizard,
-    exe_gui,
-    a_cli.binaries,
-    a_cli.zipfiles,
-    a_cli.datas,
-    a_wizard.binaries,
-    a_wizard.zipfiles,
-    a_wizard.datas,
-    a_gui.binaries,
-    a_gui.zipfiles,
-    a_gui.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='focus_mapper',
 )

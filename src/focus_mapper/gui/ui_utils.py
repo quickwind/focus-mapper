@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timezone
+import math
+import re
 import tkinter as tk
 from tkinter import ttk
 from tkinter import font as tkfont
@@ -100,3 +103,101 @@ def autosize_treeview_columns(
                 width = max_widths[col]
                 break
         tree.column(col, width=max(min_widths[col], min(width, max_widths[col])))
+
+
+def make_combobox_filterable(combobox: ttk.Combobox, values: list[str]):
+    """Enable type-to-filter behavior for a combobox value list."""
+    all_values = [str(v) for v in values]
+    combobox["values"] = all_values
+    # Readonly comboboxes block typing, so switch to normal for filtering.
+    if str(combobox.cget("state")) == "readonly":
+        combobox.configure(state="normal")
+
+    def _on_keyrelease(event=None):
+        if event is not None and event.keysym in {"Up", "Down", "Left", "Right", "Escape"}:
+            return
+        typed = combobox.get()
+        needle = typed.strip().lower()
+        if not needle:
+            filtered = all_values
+        else:
+            # Prefix match to narrow to likely source column names quickly.
+            filtered = [item for item in all_values if item.lower().startswith(needle)]
+
+        combobox["values"] = filtered
+        # Keep user-typed text stable after replacing values.
+        combobox.delete(0, "end")
+        combobox.insert(0, typed)
+        combobox.icursor("end")
+
+        # Auto-open dropdown while typing so users can pick immediately.
+        if needle and filtered:
+            def _open_dropdown():
+                try:
+                    combobox.tk.call("ttk::combobox::Post", str(combobox))
+                    return
+                except Exception:
+                    pass
+                try:
+                    combobox.event_generate("<Down>")
+                except Exception:
+                    pass
+            combobox.after_idle(_open_dropdown)
+
+    combobox.bind("<KeyRelease>", _on_keyrelease, add="+")
+    return combobox
+
+
+_DATETIME_LIKE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}([T ].+)?$")
+
+
+def format_datetime_utc_z(value) -> str | None:
+    """Return datetime formatted as `YYYY-MM-DDTHH:MM:SSZ` when possible."""
+    dt_obj: datetime | None = None
+
+    if isinstance(value, datetime):
+        dt_obj = value
+    elif isinstance(value, date):
+        dt_obj = datetime(value.year, value.month, value.day)
+    else:
+        try:
+            import pandas as pd  # type: ignore
+            if isinstance(value, pd.Timestamp):
+                dt_obj = value.to_pydatetime()
+        except Exception:
+            pass
+
+    if dt_obj is None and isinstance(value, str):
+        raw = value.strip()
+        if not raw or not _DATETIME_LIKE_RE.match(raw):
+            return None
+        try:
+            import pandas as pd  # type: ignore
+            parsed = pd.to_datetime(raw, utc=True, errors="raise")
+            return parsed.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            try:
+                iso = raw.replace("Z", "+00:00")
+                dt_obj = datetime.fromisoformat(iso)
+            except Exception:
+                return None
+
+    if dt_obj is None:
+        return None
+    if dt_obj.tzinfo is None:
+        dt_obj = dt_obj.replace(tzinfo=timezone.utc)
+    else:
+        dt_obj = dt_obj.astimezone(timezone.utc)
+    return dt_obj.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def format_value_for_display(value) -> str:
+    """Format UI cell value with normalized datetime rendering where applicable."""
+    if value is None:
+        return ""
+    if isinstance(value, float) and math.isnan(value):
+        return ""
+    dt_text = format_datetime_utc_z(value)
+    if dt_text is not None:
+        return dt_text
+    return str(value)

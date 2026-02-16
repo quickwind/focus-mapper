@@ -3,15 +3,17 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 import os
 
 import yaml # Added import
 from focus_mapper.gui.ui_utils import (
     set_tooltip,
-    refresh_sort_headers,
-    sort_tree_items,
-    autosize_treeview_columns,
+            refresh_sort_headers,
+            sort_tree_items,
+            autosize_treeview_columns,
+            make_combobox_filterable,
 )
 
 class MappingsListView(ttk.Frame):
@@ -120,8 +122,7 @@ class MappingsListView(ttk.Frame):
 
         for file_path in self.mappings_dir.glob("*.yaml"):
             mod_time = os.path.getmtime(file_path)
-            from datetime import datetime
-            dt = datetime.fromtimestamp(mod_time).strftime('%Y-%m-%d %H:%M:%S')
+            dt = datetime.fromtimestamp(mod_time, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             
             # Read mapping details
             spec_ver = "-"
@@ -269,6 +270,7 @@ class MappingsListView(ttk.Frame):
             pass
             
         cb = ttk.Combobox(content, values=versions, state="readonly")
+        make_combobox_filterable(cb, versions)
         if versions:
             cb.current(0)
         cb.pack(fill="x", pady=(0, 15))

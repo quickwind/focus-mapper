@@ -13,7 +13,7 @@ from focus_mapper.io import read_table
 from focus_mapper.mapping.config import load_mapping_config
 from focus_mapper.mapping.executor import generate_focus_dataframe
 from focus_mapper.spec import load_focus_spec
-from focus_mapper.gui.ui_utils import set_tooltip, refresh_sort_headers, sort_tree_items
+from focus_mapper.gui.ui_utils import set_tooltip, refresh_sort_headers, sort_tree_items, format_value_for_display
 
 
 class GeneratorView(ttk.Frame):
@@ -454,7 +454,7 @@ class GeneratorView(ttk.Frame):
 
         for idx, row in enumerate(preview_df.itertuples(index=False, name=None), start=1):
             values = [idx]
-            values.extend("" if v is None else str(v) for v in row)
+            values.extend(format_value_for_display(v) for v in row)
             self.preview_tree.insert("", "end", values=values)
         self._autosize_preview_columns(preview_df, columns, index_col)
         self._refresh_preview_sort_headers()
