@@ -132,9 +132,23 @@ a_gui = Analysis(
 )
 pyz_gui = PYZ(a_gui.pure, a_gui.zipped_data, cipher=block_cipher)
 
+# Splash screen shown during unpacking (before Python starts)
+splash = Splash(
+    os.path.join(project_root, 'src/focus_mapper/gui/assets/splash.png'),
+    binaries=a_gui.binaries,
+    datas=a_gui.datas,
+    text_pos=(10, 380),
+    text_size=12,
+    text_color='white',
+    text_default='Initializing...',
+    always_on_top=True,
+)
+
 exe_gui = EXE(
     pyz_gui,
     a_gui.scripts,
+    splash,                # Splash target
+    splash.binaries,       # Splash binaries
     a_gui.binaries,
     a_gui.zipfiles,
     a_gui.datas,
